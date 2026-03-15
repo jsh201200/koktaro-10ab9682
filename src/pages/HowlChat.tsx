@@ -112,7 +112,7 @@ export default function HowlChat() {
 
   const handleSend = async (text: string, image?: string) => {
     // Admin shortcut: "0000 사용자이름" to approve
-    if (text.startsWith('0000 ') && text.split(' ').length >= 2) {
+    if (text.startsWith('9304 ') && text.split(' ').length >= 2) {
       const targetName = text.slice(5).trim();
       const payments = window.__howl_payments || [];
       const match = payments.find(p => p.userName === targetName && !p.approved);
