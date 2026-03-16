@@ -356,9 +356,18 @@ export default function HowlChat() {
         />
       )}
 
+      {/* Admin settings button */}
+      <button
+        onClick={() => navigate('/admin/settings')}
+        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-white/60 transition-colors opacity-40 hover:opacity-100"
+        title="관리자 설정"
+      >
+        <Settings className="w-4 h-4 text-muted-foreground" />
+      </button>
+
       <div className="fixed bottom-0 w-full text-center pb-1 z-30 pointer-events-none">
         <p className="text-[8px] text-muted-foreground/60 max-w-2xl mx-auto px-4">
-          본 상담은 엔터테인먼트 콘텐츠이며, 의학적·법률적·재무적 자문을 대체할 수 없습니다.
+          {settings.disclaimerText}
         </p>
       </div>
     </div>

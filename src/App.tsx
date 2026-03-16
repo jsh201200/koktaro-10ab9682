@@ -19,6 +19,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<HowlChat />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
