@@ -8,9 +8,12 @@ import PaymentModal from '@/components/PaymentModal';
 import PremiumForm from '@/components/PremiumForm';
 import TypingIndicator from '@/components/TypingIndicator';
 import { useChat } from '@/hooks/useChat';
-import { Menu, MENU_WELCOME_GUIDES } from '@/data/menus';
+import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
+import { useSiteSettings } from '@/stores/siteSettings';
+import { Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const KAKAO_CHANNEL = 'https://pf.kakao.com/_cLdxhX';
 const TYPING_DELAY_MS = 3000;
