@@ -18,7 +18,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
   const s = loadSettings();
 
   const handleKakaoPay = () => {
-    window.open('https://qr.kakaopay.com/Ej82jM60H', '_blank');
+    window.open(s.kakaoPayLink, '_blank');
     onPaymentSubmit('kakaopay', depositor || userName, phoneTail);
   };
 
