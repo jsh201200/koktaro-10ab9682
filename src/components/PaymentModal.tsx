@@ -126,7 +126,9 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
 
           <div className="mt-4 pt-3 border-t border-border">
             <p className="text-[9px] text-muted-foreground text-center leading-relaxed">
-              디지털 콘텐츠 특성상 리딩 시작 후 환불이 불가합니다.
+              {s.refundPolicy}
+            </p>
+          </div>
             </p>
           </div>
         </motion.div>
