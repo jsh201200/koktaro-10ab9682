@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { Menu } from '@/data/menus';
 import { X } from 'lucide-react';
+import { loadSettings } from '@/stores/siteSettings';
 
 interface PaymentModalProps {
   menu: Menu;
@@ -14,9 +15,10 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
+  const s = loadSettings();
 
   const handleKakaoPay = () => {
-    window.open('https://qr.kakaopay.com/Ej82jM60H', '_blank');
+    window.open(s.kakaoPayLink, '_blank');
     onPaymentSubmit('kakaopay', depositor || userName, phoneTail);
   };
 
@@ -92,15 +94,15 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
               <div className="glass rounded-2xl p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">은행</span>
-                  <span className="font-semibold text-foreground">카카오뱅크</span>
+                  <span className="font-semibold text-foreground">{s.bankName}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">계좌번호</span>
-                  <span className="font-semibold text-foreground font-mono">3333-36-8761312</span>
+                  <span className="font-semibold text-foreground font-mono">{s.bankAccount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">예금주</span>
-                  <span className="font-semibold text-foreground">정승하</span>
+                  <span className="font-semibold text-foreground">{s.bankHolder}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">금액</span>
@@ -124,7 +126,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
 
           <div className="mt-4 pt-3 border-t border-border">
             <p className="text-[9px] text-muted-foreground text-center leading-relaxed">
-              디지털 콘텐츠 특성상 리딩 시작 후 환불이 불가합니다.
+              {s.refundPolicy}
             </p>
           </div>
         </motion.div>

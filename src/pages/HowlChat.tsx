@@ -8,9 +8,12 @@ import PaymentModal from '@/components/PaymentModal';
 import PremiumForm from '@/components/PremiumForm';
 import TypingIndicator from '@/components/TypingIndicator';
 import { useChat } from '@/hooks/useChat';
-import { Menu, MENU_WELCOME_GUIDES } from '@/data/menus';
+import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
+import { useSiteSettings } from '@/stores/siteSettings';
+import { Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const KAKAO_CHANNEL = 'https://pf.kakao.com/_cLdxhX';
 const TYPING_DELAY_MS = 3000;
@@ -21,6 +24,8 @@ export default function HowlChat() {
     addBotMessage, addUserMessage, addSystemMessage,
     updateSession, resetSession,
   } = useChat();
+  const { settings } = useSiteSettings();
+  const navigate = useNavigate();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -35,7 +40,7 @@ export default function HowlChat() {
 
   // Initial greeting - asks for nickname
   useEffect(() => {
-    addBotMessage("안녕! 하울의 상담소에 온 걸 환영해. ✨\n\n너의 기운을 느끼기 전에, 내가 너를 뭐라고 부르면 좋을지 알려줄래?");
+    addBotMessage(settings.welcomeMessage);
   }, []);
 
   // Session timer
@@ -117,8 +122,8 @@ export default function HowlChat() {
 
   const handleSend = async (text: string, image?: string) => {
     // Admin shortcut
-    if (text.startsWith('9304 ') && text.split(' ').length >= 2) {
-      const targetName = text.slice(5).trim();
+    if (text.startsWith(`${settings.adminPassword} `) && text.split(' ').length >= 2) {
+      const targetName = text.slice(settings.adminPassword.length + 1).trim();
       const payments = window.__howl_payments || [];
       const match = payments.find(p => p.userName === targetName && !p.approved);
       if (match) {
@@ -284,8 +289,12 @@ export default function HowlChat() {
     addBotMessage('프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n결제 확인 후 하울이 직접 심층 리포트를 작성해줄게. 잠시만 기다려줘!\n\n카카오뱅크 3333-36-8761312 (정승하)로 59,000원 입금 후 기다려주면 돼!');
   };
 
-  return (
-    <div className="min-h-svh aurora-bg">
+    const bgStyle = (settings.bgGradientStart !== '#FDFCFB')
+      ? { background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`, backgroundSize: '400% 400%' }
+      : undefined;
+
+    return (
+    <div className="min-h-svh aurora-bg" style={bgStyle}>
       <ChatHeader sessionTime={sessionTime} />
 
       <main className="pt-20 pb-36 px-4 max-w-2xl mx-auto space-y-4">
@@ -347,9 +356,18 @@ export default function HowlChat() {
         />
       )}
 
+      {/* Admin settings button */}
+      <button
+        onClick={() => navigate('/admin/settings')}
+        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-white/60 transition-colors opacity-40 hover:opacity-100"
+        title="관리자 설정"
+      >
+        <Settings className="w-4 h-4 text-muted-foreground" />
+      </button>
+
       <div className="fixed bottom-0 w-full text-center pb-1 z-30 pointer-events-none">
         <p className="text-[8px] text-muted-foreground/60 max-w-2xl mx-auto px-4">
-          본 상담은 엔터테인먼트 콘텐츠이며, 의학적·법률적·재무적 자문을 대체할 수 없습니다.
+          {settings.disclaimerText}
         </p>
       </div>
     </div>

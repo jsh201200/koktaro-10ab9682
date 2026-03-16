@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { loadSettings } from '@/stores/siteSettings';
 
 interface PendingPayment {
   id: string;
@@ -29,7 +30,7 @@ export default function AdminDashboard() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [reportText, setReportText] = useState<Record<string, string>>({});
 
-  const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || '9304';
+  const ADMIN_PASSWORD = loadSettings().adminPassword;
 
   const payments: PendingPayment[] = window.__howl_payments || [];
 
