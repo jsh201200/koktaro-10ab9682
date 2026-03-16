@@ -15,6 +15,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
+  const s = loadSettings();
 
   const handleKakaoPay = () => {
     window.open('https://qr.kakaopay.com/Ej82jM60H', '_blank');
