@@ -8,11 +8,12 @@ import PaymentModal from '@/components/PaymentModal';
 import PremiumForm from '@/components/PremiumForm';
 import TypingIndicator from '@/components/TypingIndicator';
 import { useChat } from '@/hooks/useChat';
-import { Menu } from '@/data/menus';
+import { Menu, MENU_WELCOME_GUIDES } from '@/data/menus';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
 
 const KAKAO_CHANNEL = 'https://pf.kakao.com/_cLdxhX';
+const TYPING_DELAY_MS = 3000;
 
 export default function HowlChat() {
   const {
@@ -28,14 +29,13 @@ export default function HowlChat() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Initial greeting
+  // Initial greeting - asks for nickname
   useEffect(() => {
-    addBotMessage("하울의 상담소에 온 걸 환영해! ✨\n\n너의 기운을 읽기 전에 이름을 먼저 알려줄래?");
+    addBotMessage("안녕! 하울의 상담소에 온 걸 환영해. ✨\n\n너의 기운을 느끼기 전에, 내가 너를 뭐라고 부르면 좋을지 알려줄래?");
   }, []);
 
   // Session timer
@@ -44,7 +44,6 @@ export default function HowlChat() {
       timerRef.current = setInterval(() => {
         const remaining = Math.max(0, Math.floor((session.sessionExpiry! - Date.now()) / 1000));
         setSessionTime(remaining);
-
         if (remaining === 300) {
           addSystemMessage("기운이 다해가고 있어! 5분 뒤면 상담이 종료되니 서둘러줘! ✨");
         }
@@ -59,7 +58,7 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid]);
 
-  // Register payments for admin dashboard
+  // Admin payment approval
   useEffect(() => {
     if (!window.__howl_payments) window.__howl_payments = [];
     window.__howl_approve = (paymentId: string) => {
@@ -67,7 +66,6 @@ export default function HowlChat() {
       const payment = payments.find(p => p.id === paymentId);
       if (payment) {
         payment.approved = true;
-        // Trigger paid session
         updateSession({
           isPaid: true,
           sessionExpiry: Date.now() + 30 * 60 * 1000,
@@ -84,6 +82,10 @@ export default function HowlChat() {
     };
   }, [session.userName]);
 
+  const delayedTyping = useCallback((): Promise<void> => {
+    return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
+  }, []);
+
   const handleBotResponse = useCallback(async (
     userInput: string,
     menuName?: string,
@@ -92,6 +94,9 @@ export default function HowlChat() {
   ) => {
     setIsTyping(true);
     try {
+      // Intentional mystical delay
+      await delayedTyping();
+
       const history = messages
         .filter(m => m.role !== 'system')
         .map(m => ({
@@ -108,10 +113,10 @@ export default function HowlChat() {
     } finally {
       setIsTyping(false);
     }
-  }, [messages, addBotMessage, setIsTyping]);
+  }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
   const handleSend = async (text: string, image?: string) => {
-    // Admin shortcut: "0000 사용자이름" to approve
+    // Admin shortcut
     if (text.startsWith('9304 ') && text.split(' ').length >= 2) {
       const targetName = text.slice(5).trim();
       const payments = window.__howl_payments || [];
@@ -125,15 +130,18 @@ export default function HowlChat() {
 
     addUserMessage(text, image);
 
-    // Name collection
+    // Name/nickname collection
     if (!session.userName) {
-      const name = text.trim().replace(/[^가-힣a-zA-Z\s]/g, '').trim();
+      const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
       if (name) {
         updateSession({ userName: name });
-        addBotMessage(`${name}! 아름다운 이름이야 ✨\n\n너의 기운이 살랑살랑 느껴지기 시작했어. 어떤 운명의 문을 열어볼까?\n\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+        setIsTyping(true);
+        await delayedTyping();
+        setIsTyping(false);
+        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n너의 기운이 살랑살랑 느껴지기 시작했어. 어떤 운명의 문을 열어볼까?\n\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
         return;
       }
-      addBotMessage('이름을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
+      addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
       return;
     }
 
@@ -159,7 +167,6 @@ export default function HowlChat() {
       updateSession({ imageFailCount: newCount });
     }
 
-    // Get AI response
     await handleBotResponse(
       text,
       session.selectedMenu?.name,
@@ -176,7 +183,7 @@ export default function HowlChat() {
     }
   };
 
-  const handleMenuSelect = (menu: Menu) => {
+  const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
     updateSession({ selectedMenu: menu, freeReadingDone: false, questionCount: 0, imageFailCount: 0 });
 
@@ -186,11 +193,16 @@ export default function HowlChat() {
     }
 
     addSystemMessage(`${menu.icon} ${menu.name} 상담을 시작합니다`);
-    handleBotResponse(
-      `${session.userName}님이 ${menu.name} 메뉴를 선택했어.`,
-      menu.name,
-      false,
-    );
+
+    // Show welcome guide first
+    const guide = MENU_WELCOME_GUIDES[menu.id];
+    if (guide) {
+      setIsTyping(true);
+      await delayedTyping();
+      setIsTyping(false);
+      const userName = session.userName;
+      addBotMessage(`${userName}님, ${guide}`);
+    }
   };
 
   const handlePaymentSubmit = (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
@@ -200,7 +212,6 @@ export default function HowlChat() {
     const paymentId = `pay-${Date.now()}`;
     const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
 
-    // Store for admin
     if (!window.__howl_payments) window.__howl_payments = [];
     window.__howl_payments.push({
       id: paymentId,
@@ -277,7 +288,6 @@ export default function HowlChat() {
     <div className="min-h-svh aurora-bg">
       <ChatHeader sessionTime={sessionTime} />
 
-      {/* Chat area */}
       <main className="pt-20 pb-36 px-4 max-w-2xl mx-auto space-y-4">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
@@ -288,15 +298,13 @@ export default function HowlChat() {
         <div ref={chatEndRef} />
       </main>
 
-      {/* Footer */}
       <ChatInput
         onSend={handleSend}
         onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
         disabled={isTyping}
-        placeholder={!session.userName ? '이름을 입력해줘...' : '하울에게 메시지 보내기...'}
+        placeholder={!session.userName ? '호칭을 입력해줘...' : '하울에게 메시지 보내기...'}
       />
 
-      {/* Payment CTA - shown after free reading */}
       {session.freeReadingDone && !session.isPaid && session.selectedMenu && (
         <div className="fixed bottom-[120px] w-full px-4 z-40">
           <div className="max-w-2xl mx-auto">
@@ -316,7 +324,6 @@ export default function HowlChat() {
         </div>
       )}
 
-      {/* Modals */}
       <AnimatePresence>
         {isMenuOpen && (
           <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} />
@@ -340,7 +347,6 @@ export default function HowlChat() {
         />
       )}
 
-      {/* Footer disclaimer */}
       <div className="fixed bottom-0 w-full text-center pb-1 z-30 pointer-events-none">
         <p className="text-[8px] text-muted-foreground/60 max-w-2xl mx-auto px-4">
           본 상담은 엔터테인먼트 콘텐츠이며, 의학적·법률적·재무적 자문을 대체할 수 없습니다.

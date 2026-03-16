@@ -11,9 +11,11 @@ interface MenuGridProps {
 function FlipCard({ menu, onSelect }: { menu: Menu; onSelect: (m: Menu) => void }) {
   const [isFlipped, setIsFlipped] = useState(false);
 
+  const isSnack = menu.isSnack;
+
   return (
     <div
-      className="h-44 perspective-1000 cursor-pointer"
+      className={`perspective-1000 cursor-pointer ${isSnack ? 'h-36' : 'h-44'}`}
       onMouseEnter={() => setIsFlipped(true)}
       onMouseLeave={() => setIsFlipped(false)}
       onClick={() => setIsFlipped(!isFlipped)}
@@ -24,17 +26,33 @@ function FlipCard({ menu, onSelect }: { menu: Menu; onSelect: (m: Menu) => void 
         className="relative w-full h-full transform-style-3d"
       >
         {/* Front */}
-        <div className="absolute inset-0 backface-hidden glass glow-border rounded-2xl p-3 flex flex-col items-center justify-center text-center">
-          <span className="text-2xl mb-1.5">{menu.icon}</span>
-          <span className="text-[9px] text-primary font-bold tracking-wider mb-0.5">
-            MENU {menu.id}
-          </span>
-          <h3 className="font-semibold text-sm text-foreground">{menu.name}</h3>
-          <p className="text-[10px] text-muted-foreground mt-1.5 leading-tight px-1">{menu.desc}</p>
+        <div className={`absolute inset-0 backface-hidden rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
+          isSnack
+            ? 'bg-gradient-to-br from-yellow-50/80 to-pink-50/80 border-2 border-dashed border-primary/30 shadow-[0_0_12px_rgba(var(--primary-rgb),0.15)]'
+            : 'glass glow-border'
+        }`}>
+          <span className={`mb-1.5 ${isSnack ? 'text-3xl animate-bounce' : 'text-2xl'}`}>{menu.icon}</span>
+          {!isSnack && (
+            <span className="text-[9px] text-primary font-bold tracking-wider mb-0.5">
+              MENU {menu.id}
+            </span>
+          )}
+          {isSnack && (
+            <span className="text-[9px] text-primary font-bold tracking-wider mb-0.5 bg-primary/10 px-2 py-0.5 rounded-full">
+              🌟 NEW
+            </span>
+          )}
+          <h3 className={`font-semibold text-foreground ${isSnack ? 'text-xs' : 'text-sm'}`}>{menu.name}</h3>
+          <p className="text-[10px] text-muted-foreground mt-1 leading-tight px-1">{menu.desc}</p>
+          {isSnack && (
+            <span className="mt-1 text-[10px] font-bold text-primary">{menu.price.toLocaleString()}원</span>
+          )}
         </div>
 
         {/* Back */}
-        <div className="absolute inset-0 backface-hidden rotateY-180 glass-strong rounded-2xl p-3 flex flex-col items-center justify-center text-center border border-primary/20">
+        <div className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center border border-primary/20 ${
+          isSnack ? 'bg-gradient-to-br from-primary/10 to-pink-100/80' : 'glass-strong'
+        }`}>
           <span className="text-[9px] text-muted-foreground mb-1">{menu.categoryName}</span>
           <span className="text-lg font-bold text-primary mb-1">
             {menu.price.toLocaleString()}원

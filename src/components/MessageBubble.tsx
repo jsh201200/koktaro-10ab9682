@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '@/hooks/useChat';
 import howlProfile from '@/assets/howl-profile.png';
 
@@ -6,8 +7,30 @@ interface MessageBubbleProps {
   message: ChatMessage;
 }
 
+function StreamingText({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState('');
+  const indexRef = useRef(0);
+
+  useEffect(() => {
+    indexRef.current = 0;
+    setDisplayed('');
+    const interval = setInterval(() => {
+      indexRef.current += 1;
+      if (indexRef.current >= text.length) {
+        setDisplayed(text);
+        clearInterval(interval);
+      } else {
+        setDisplayed(text.slice(0, indexRef.current));
+      }
+    }, 18);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{displayed}</p>;
+}
+
 export default function MessageBubble({ message }: MessageBubbleProps) {
-  const { role, content, image } = message;
+  const { role, content, image, isNew } = message;
 
   if (role === 'system') {
     return (
@@ -49,7 +72,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             <img src={image} alt="업로드 이미지" className="w-full max-h-48 object-cover" />
           </div>
         )}
-        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{content}</p>
+        {isBot && isNew ? (
+          <StreamingText text={content} />
+        ) : (
+          <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{content}</p>
+        )}
       </div>
     </motion.div>
   );
