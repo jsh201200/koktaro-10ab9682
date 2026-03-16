@@ -94,15 +94,15 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
               <div className="glass rounded-2xl p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">은행</span>
-                  <span className="font-semibold text-foreground">카카오뱅크</span>
+                  <span className="font-semibold text-foreground">{s.bankName}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">계좌번호</span>
-                  <span className="font-semibold text-foreground font-mono">3333-36-8761312</span>
+                  <span className="font-semibold text-foreground font-mono">{s.bankAccount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">예금주</span>
-                  <span className="font-semibold text-foreground">정승하</span>
+                  <span className="font-semibold text-foreground">{s.bankHolder}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">금액</span>
