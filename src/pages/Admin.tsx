@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { loadSettings } from '@/stores/siteSettings';
 
 interface PendingPayment {
   id: string;
