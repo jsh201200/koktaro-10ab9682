@@ -289,8 +289,12 @@ export default function HowlChat() {
     addBotMessage('프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n결제 확인 후 하울이 직접 심층 리포트를 작성해줄게. 잠시만 기다려줘!\n\n카카오뱅크 3333-36-8761312 (정승하)로 59,000원 입금 후 기다려주면 돼!');
   };
 
-  return (
-    <div className="min-h-svh aurora-bg">
+    const bgStyle = (settings.bgGradientStart !== '#FDFCFB')
+      ? { background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`, backgroundSize: '400% 400%' }
+      : undefined;
+
+    return (
+    <div className="min-h-svh aurora-bg" style={bgStyle}>
       <ChatHeader sessionTime={sessionTime} />
 
       <main className="pt-20 pb-36 px-4 max-w-2xl mx-auto space-y-4">
