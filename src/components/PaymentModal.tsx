@@ -129,7 +129,6 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
               {s.refundPolicy}
             </p>
           </div>
-            </p>
           </div>
         </motion.div>
       </motion.div>
