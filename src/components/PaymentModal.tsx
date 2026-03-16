@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { Menu } from '@/data/menus';
 import { X } from 'lucide-react';
+import { loadSettings } from '@/stores/siteSettings';
 
 interface PaymentModalProps {
   menu: Menu;
