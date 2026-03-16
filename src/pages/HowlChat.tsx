@@ -40,7 +40,7 @@ export default function HowlChat() {
 
   // Initial greeting - asks for nickname
   useEffect(() => {
-    addBotMessage("안녕! 하울의 상담소에 온 걸 환영해. ✨\n\n너의 기운을 느끼기 전에, 내가 너를 뭐라고 부르면 좋을지 알려줄래?");
+    addBotMessage(settings.welcomeMessage);
   }, []);
 
   // Session timer
