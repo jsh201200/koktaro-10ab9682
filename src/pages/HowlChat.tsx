@@ -122,7 +122,7 @@ export default function HowlChat() {
 
   const handleSend = async (text: string, image?: string) => {
     // Admin shortcut
-    if (text.startsWith('9304 ') && text.split(' ').length >= 2) {
+    if (text.startsWith(`${settings.adminPassword} `) && text.split(' ').length >= 2) {
       const targetName = text.slice(5).trim();
       const payments = window.__howl_payments || [];
       const match = payments.find(p => p.userName === targetName && !p.approved);
