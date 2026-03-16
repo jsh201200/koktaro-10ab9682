@@ -7,6 +7,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   image?: string;
+  isNew?: boolean;
 }
 
 export interface SessionState {
@@ -45,8 +46,12 @@ export function useChat() {
   };
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, image?: string) => {
-    const msg: ChatMessage = { id: genId(), role, content, timestamp: Date.now(), image };
-    setMessages(prev => [...prev, msg]);
+    const msg: ChatMessage = { id: genId(), role, content, timestamp: Date.now(), image, isNew: role === 'bot' };
+    setMessages(prev => {
+      // Mark old bot messages as not new
+      const updated = prev.map(m => m.isNew ? { ...m, isNew: false } : m);
+      return [...updated, msg];
+    });
     return msg;
   }, []);
 
