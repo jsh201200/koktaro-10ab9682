@@ -24,6 +24,8 @@ export default function HowlChat() {
     addBotMessage, addUserMessage, addSystemMessage,
     updateSession, resetSession,
   } = useChat();
+  const { settings } = useSiteSettings();
+  const navigate = useNavigate();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
