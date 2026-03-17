@@ -1,72 +1,83 @@
-import { HOWL_SYSTEM_PROMPT, getMenuPrompt } from '@/data/persona';
+import { supabase } from "@/integrations/supabase/client";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCZGs9p0OLLXGIHuB2viWZJ6UOXNufaj58';
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/howl-chat`;
 
-interface GeminiMessage {
-  role: 'user' | 'model';
-  parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
+interface ChatHistoryMessage {
+  role: 'bot' | 'user';
+  content: string;
 }
 
 export async function getGeminiResponse(
   userInput: string,
-  history: GeminiMessage[],
+  history: ChatHistoryMessage[],
   menuName?: string,
   isPaid?: boolean,
   imageBase64?: string,
 ): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    // Fallback responses when no API key
-    return getFallbackResponse(menuName, isPaid);
-  }
-
-  const systemInstruction = menuName
-    ? `${HOWL_SYSTEM_PROMPT}\n\n${getMenuPrompt(menuName, isPaid || false)}`
-    : HOWL_SYSTEM_PROMPT;
-
-  const userParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
-  if (userInput) userParts.push({ text: userInput });
-  if (imageBase64) {
-    const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
-    userParts.push({ inlineData: { mimeType: 'image/jpeg', data: base64Data } });
-  }
-
-  const contents: GeminiMessage[] = [
-    ...history,
-    { role: 'user', parts: userParts },
+  // Build messages from history + current input
+  const messages = [
+    ...history.map(m => ({ role: m.role, content: m.content })),
+    { role: 'user' as const, content: userInput },
   ];
 
   try {
-    const response = await fetch(`${API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents,
-        generationConfig: {
-          temperature: 0.9,
-          topP: 0.95,
-          maxOutputTokens: 1024,
-        },
-      }),
+    const resp = await fetch(CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ messages, menuName, isPaid, imageBase64 }),
     });
 
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '기운이 잠시 흔들렸어... 다시 한번 물어봐줄래? ✨';
+    if (!resp.ok) {
+      if (resp.status === 429) throw new Error("rate_limited");
+      if (resp.status === 402) throw new Error("credits_exhausted");
+      throw new Error(`API error ${resp.status}`);
+    }
+
+    if (!resp.body) throw new Error("No response body");
+
+    // Parse SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let textBuffer = "";
+    let result = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      textBuffer += decoder.decode(value, { stream: true });
+
+      let newlineIndex: number;
+      while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+        let line = textBuffer.slice(0, newlineIndex);
+        textBuffer = textBuffer.slice(newlineIndex + 1);
+
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (line.startsWith(":") || line.trim() === "") continue;
+        if (!line.startsWith("data: ")) continue;
+
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === "[DONE]") break;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) result += content;
+        } catch {
+          textBuffer = line + "\n" + textBuffer;
+          break;
+        }
+      }
+    }
+
+    return result || "기운이 잠시 흔들렸어... 다시 한번 물어봐줄래? ✨";
   } catch (error) {
-    console.error('Gemini API error:', error);
-    return '천상계와의 연결이 잠시 끊겼어... 조금 후에 다시 시도해줘! 🌟';
+    console.error("Chat API error:", error);
+    if ((error as Error).message === "rate_limited") {
+      return "요청이 너무 많아서 기운이 잠시 흔들렸어... 조금만 기다렸다가 다시 물어봐줘! ✨";
+    }
+    return "천상계와의 연결이 잠시 끊겼어... 조금 후에 다시 시도해줘! 🌟";
   }
-}
-
-function getFallbackResponse(menuName?: string, isPaid?: boolean): string {
-  if (!menuName) {
-    return '반가워! 하울이 너의 기운을 느끼고 있어 ✨ 어떤 상담을 원하는지 메뉴에서 골라줘!';
-  }
-
-  if (isPaid) {
-    return `${menuName} 심층 분석을 시작할게! 너의 기운이 점점 선명해지고 있어... 아주 흥미로운 흐름이 보여! ✨ (Gemini API 키를 설정하면 실제 AI 리딩이 제공됩니다)`;
-  }
-
-  return `오늘 너의 에너지가 평소보다 맑게 느껴지는데? 🌟 ${menuName}으로 읽어본 너의 기운은... 최근에 큰 결정을 앞두고 있지 않아? 하울의 촉이 강하게 오는 걸 보니 중요한 전환점에 서 있는 것 같아!\n\n더 소름 돋는 미래 결과는 유료 분석에서만 볼 수 있어! 💎`;
 }
