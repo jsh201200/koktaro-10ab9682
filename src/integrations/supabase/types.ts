@@ -14,7 +14,264 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      chat_history: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          image_url: string | null
+          role: string
+          session_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          role: string
+          session_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          role?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_history_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          ip_hint: string | null
+          is_paid: boolean | null
+          referrer: string | null
+          selected_menu_id: number | null
+          session_token: string | null
+          updated_at: string | null
+          user_agent: string | null
+          user_nickname: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          ip_hint?: string | null
+          is_paid?: boolean | null
+          referrer?: string | null
+          selected_menu_id?: number | null
+          session_token?: string | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_nickname?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          ip_hint?: string | null
+          is_paid?: boolean | null
+          referrer?: string | null
+          selected_menu_id?: number | null
+          session_token?: string | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_nickname?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_selected_menu_id_fkey"
+            columns: ["selected_menu_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["menu_id"]
+          },
+        ]
+      }
+      page_visits: {
+        Row: {
+          created_at: string | null
+          id: string
+          path: string | null
+          referrer: string | null
+          session_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          path?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          path?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_visits_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          approved_at: string | null
+          chat_log: Json | null
+          created_at: string | null
+          depositor: string | null
+          id: string
+          menu_id: number | null
+          menu_name: string
+          method: string
+          phone_tail: string | null
+          price: number
+          questions: Json | null
+          session_id: string | null
+          status: string
+          user_nickname: string
+        }
+        Insert: {
+          approved_at?: string | null
+          chat_log?: Json | null
+          created_at?: string | null
+          depositor?: string | null
+          id?: string
+          menu_id?: number | null
+          menu_name: string
+          method: string
+          phone_tail?: string | null
+          price: number
+          questions?: Json | null
+          session_id?: string | null
+          status?: string
+          user_nickname: string
+        }
+        Update: {
+          approved_at?: string | null
+          chat_log?: Json | null
+          created_at?: string | null
+          depositor?: string | null
+          id?: string
+          menu_id?: number | null
+          menu_name?: string
+          method?: string
+          phone_tail?: string | null
+          price?: number
+          questions?: Json | null
+          session_id?: string | null
+          status?: string
+          user_nickname?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["menu_id"]
+          },
+          {
+            foreignKeyName: "payments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string
+          category_name: string
+          created_at: string | null
+          description: string | null
+          detail_description: string | null
+          enabled: boolean | null
+          icon: string | null
+          id: number
+          is_snack: boolean | null
+          menu_id: number
+          name: string
+          price: number
+          sort_order: number | null
+          updated_at: string | null
+          welcome_guide: string | null
+        }
+        Insert: {
+          category?: string
+          category_name?: string
+          created_at?: string | null
+          description?: string | null
+          detail_description?: string | null
+          enabled?: boolean | null
+          icon?: string | null
+          id?: number
+          is_snack?: boolean | null
+          menu_id: number
+          name: string
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+          welcome_guide?: string | null
+        }
+        Update: {
+          category?: string
+          category_name?: string
+          created_at?: string | null
+          description?: string | null
+          detail_description?: string | null
+          enabled?: boolean | null
+          icon?: string | null
+          id?: number
+          is_snack?: boolean | null
+          menu_id?: number
+          name?: string
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+          welcome_guide?: string | null
+        }
+        Relationships: []
+      }
+      site_config: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
