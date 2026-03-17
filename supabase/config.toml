@@ -1,1 +1,7 @@
 project_id = "lxhsxfmdrzjfecrimbka"
+
+[functions.howl-chat]
+verify_jwt = false
+
+[functions.discord-alert]
+verify_jwt = false

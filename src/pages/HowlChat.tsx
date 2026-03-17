@@ -12,8 +12,10 @@ import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
 import { useSiteSettings } from '@/stores/siteSettings';
+import { supabase } from '@/integrations/supabase/client';
 import { Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const KAKAO_CHANNEL = 'https://pf.kakao.com/_cLdxhX';
 const TYPING_DELAY_MS = 3000;
@@ -33,15 +35,22 @@ export default function HowlChat() {
   const [sessionTime, setSessionTime] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const greetingSent = useRef(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Initial greeting - asks for nickname
+  // Initial greeting
   useEffect(() => {
-    addBotMessage(settings.welcomeMessage);
-  }, []);
+    if (!greetingSent.current && messages.length === 0) {
+      greetingSent.current = true;
+      // Small delay to let DB session init
+      setTimeout(() => {
+        addBotMessage(settings.welcomeMessage);
+      }, 500);
+    }
+  }, [messages.length]);
 
   // Session timer
   useEffect(() => {
@@ -63,29 +72,44 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid]);
 
-  // Admin payment approval
+  // Realtime payment approval listener
   useEffect(() => {
-    if (!window.__howl_payments) window.__howl_payments = [];
-    window.__howl_approve = (paymentId: string) => {
-      const payments = window.__howl_payments || [];
-      const payment = payments.find(p => p.id === paymentId);
-      if (payment) {
-        payment.approved = true;
-        updateSession({
-          isPaid: true,
-          sessionExpiry: Date.now() + 30 * 60 * 1000,
-          maxQuestions: payment.menuId === 16 ? 3 : 1,
-          questionCount: 0,
-        });
-        addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
-        handleBotResponse(
-          `${session.userName}님의 결제가 확인되었어!`,
-          payment.menuName,
-          true
-        );
-      }
-    };
-  }, [session.userName]);
+    if (!session.dbSessionId) return;
+
+    const channel = supabase
+      .channel('payment-approval')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `session_id=eq.${session.dbSessionId}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (updated.status === 'approved') {
+            updateSession({
+              isPaid: true,
+              sessionExpiry: Date.now() + 30 * 60 * 1000,
+              maxQuestions: updated.menu_id === 16 ? 3 : 1,
+              questionCount: 0,
+              paymentPending: false,
+            });
+            addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
+            toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
+            handleBotResponse(
+              `${session.userName}님의 결제가 확인되었어!`,
+              updated.menu_name,
+              true
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session.dbSessionId, session.userName]);
 
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
@@ -99,14 +123,13 @@ export default function HowlChat() {
   ) => {
     setIsTyping(true);
     try {
-      // Intentional mystical delay
       await delayedTyping();
 
       const history = messages
         .filter(m => m.role !== 'system')
         .map(m => ({
-          role: (m.role === 'bot' ? 'model' : 'user') as 'user' | 'model',
-          parts: [{ text: m.content }],
+          role: m.role as 'bot' | 'user',
+          content: m.content,
         }));
 
       const response = await getGeminiResponse(
@@ -121,18 +144,6 @@ export default function HowlChat() {
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
   const handleSend = async (text: string, image?: string) => {
-    // Admin shortcut
-    if (text.startsWith(`${settings.adminPassword} `) && text.split(' ').length >= 2) {
-      const targetName = text.slice(settings.adminPassword.length + 1).trim();
-      const payments = window.__howl_payments || [];
-      const match = payments.find(p => p.userName === targetName && !p.approved);
-      if (match) {
-        window.__howl_approve?.(match.id);
-        addSystemMessage(`✅ ${targetName}님의 입금이 확인되었습니다.`);
-        return;
-      }
-    }
-
     addUserMessage(text, image);
 
     // Name/nickname collection
@@ -199,41 +210,38 @@ export default function HowlChat() {
 
     addSystemMessage(`${menu.icon} ${menu.name} 상담을 시작합니다`);
 
-    // Show welcome guide first
     const guide = MENU_WELCOME_GUIDES[menu.id];
     if (guide) {
       setIsTyping(true);
       await delayedTyping();
       setIsTyping(false);
-      const userName = session.userName;
-      addBotMessage(`${userName}님, ${guide}`);
+      addBotMessage(`${session.userName}님, ${guide}`);
     }
   };
 
-  const handlePaymentSubmit = (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
+  const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
     const menu = session.selectedMenu!;
     setShowPayment(false);
 
-    const paymentId = `pay-${Date.now()}`;
     const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
 
-    if (!window.__howl_payments) window.__howl_payments = [];
-    window.__howl_payments.push({
-      id: paymentId,
-      userName: session.userName,
-      menuName: menu.name,
-      menuId: menu.id,
+    // Save payment to DB
+    const { data: payment } = await supabase.from('payments').insert({
+      session_id: session.dbSessionId,
+      user_nickname: session.userName,
+      menu_name: menu.name,
+      menu_id: menu.id,
       price: menu.price,
       method,
       depositor,
-      phoneTail,
-      timestamp: Date.now(),
-      approved: false,
-      chatLog,
-    });
+      phone_tail: phoneTail,
+      chat_log: chatLog,
+      status: 'pending',
+    }).select().single();
 
     updateSession({ paymentPending: true });
 
+    // Send Discord alert via edge function
     sendDiscordAlert({
       userName: session.userName,
       menuName: menu.name,
@@ -249,29 +257,29 @@ export default function HowlChat() {
       addBotMessage('카카오페이 결제 링크가 열렸어! 결제가 확인되면 바로 심층 리딩을 시작할게 ✨\n\n관리자가 확인 중이니 잠시만 기다려줘!');
     } else {
       addSystemMessage('무통장 입금 확인 요청이 전송되었습니다');
-      addBotMessage('입금 확인 요청을 보냈어! 관리자가 확인하면 바로 심층 리딩이 시작될 거야 ✨\n\n카카오뱅크 3333-36-8761312 (정승하)로 입금해줘!');
+      addBotMessage(`입금 확인 요청을 보냈어! 관리자가 확인하면 바로 심층 리딩이 시작될 거야 ✨\n\n${settings.bankName} ${settings.bankAccount} (${settings.bankHolder})로 입금해줘!`);
     }
   };
 
-  const handlePremiumSubmit = (questions: string[], depositor: string, phoneTail: string) => {
+  const handlePremiumSubmit = async (questions: string[], depositor: string, phoneTail: string) => {
     setShowPremiumForm(false);
     const menu = { id: 16, name: '종합운명분석', price: 59000 } as Menu;
     updateSession({ selectedMenu: menu, paymentPending: true });
 
-    if (!window.__howl_payments) window.__howl_payments = [];
-    window.__howl_payments.push({
-      id: `pay-${Date.now()}`,
-      userName: session.userName,
-      menuName: '종합운명분석',
-      menuId: 16,
+    const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
+
+    await supabase.from('payments').insert({
+      session_id: session.dbSessionId,
+      user_nickname: session.userName,
+      menu_name: '종합운명분석',
+      menu_id: 16,
       price: 59000,
       method: 'premium',
       depositor,
-      phoneTail,
-      timestamp: Date.now(),
-      approved: false,
-      chatLog: messages.map(m => `[${m.role}] ${m.content}`),
+      phone_tail: phoneTail,
+      chat_log: chatLog,
       questions,
+      status: 'pending',
     });
 
     sendDiscordAlert({
@@ -286,14 +294,14 @@ export default function HowlChat() {
     });
 
     addSystemMessage('💎 프리미엄 상담 신청이 접수되었습니다');
-    addBotMessage('프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n결제 확인 후 하울이 직접 심층 리포트를 작성해줄게. 잠시만 기다려줘!\n\n카카오뱅크 3333-36-8761312 (정승하)로 59,000원 입금 후 기다려주면 돼!');
+    addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n결제 확인 후 하울이 직접 심층 리포트를 작성해줄게. 잠시만 기다려줘!\n\n${settings.bankName} ${settings.bankAccount} (${settings.bankHolder})로 59,000원 입금 후 기다려주면 돼!`);
   };
 
-    const bgStyle = (settings.bgGradientStart !== '#FDFCFB')
-      ? { background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`, backgroundSize: '400% 400%' }
-      : undefined;
+  const bgStyle = (settings.bgGradientStart !== '#FDFCFB')
+    ? { background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`, backgroundSize: '400% 400%' }
+    : undefined;
 
-    return (
+  return (
     <div className="min-h-svh aurora-bg" style={bgStyle}>
       <ChatHeader sessionTime={sessionTime} />
 
@@ -356,7 +364,6 @@ export default function HowlChat() {
         />
       )}
 
-      {/* Admin settings button */}
       <button
         onClick={() => navigate('/admin/settings')}
         className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-white/60 transition-colors opacity-40 hover:opacity-100"

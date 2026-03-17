@@ -1,38 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { loadSettings } from '@/stores/siteSettings';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { RefreshCw } from 'lucide-react';
 
-interface PendingPayment {
+interface Payment {
   id: string;
-  userName: string;
-  menuName: string;
-  menuId: number;
+  user_nickname: string;
+  menu_name: string;
+  menu_id: number | null;
   price: number;
   method: string;
-  depositor: string;
-  phoneTail: string;
-  timestamp: number;
-  approved: boolean;
-  chatLog: string[];
-  questions?: string[];
+  depositor: string | null;
+  phone_tail: string | null;
+  status: string;
+  created_at: string | null;
+  chat_log: any;
+  questions: any;
+  session_id: string | null;
 }
 
-// In-memory store (shared with main app via window)
-declare global {
-  interface Window {
-    __howl_payments?: PendingPayment[];
-    __howl_approve?: (paymentId: string) => void;
-  }
+interface Stats {
+  todayVisitors: number;
+  totalRevenue: number;
+  pendingCount: number;
 }
 
 export default function AdminDashboard() {
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [reportText, setReportText] = useState<Record<string, string>>({});
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [stats, setStats] = useState<Stats>({ todayVisitors: 0, totalRevenue: 0, pendingCount: 0 });
+  const [loading, setLoading] = useState(false);
 
   const ADMIN_PASSWORD = loadSettings().adminPassword;
-
-  const payments: PendingPayment[] = window.__howl_payments || [];
 
   const handlePasswordCheck = (val: string) => {
     setPassword(val);
@@ -41,9 +43,77 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleApprove = (paymentId: string) => {
-    if (window.__howl_approve) {
-      window.__howl_approve(paymentId);
+  // Fetch payments
+  const fetchPayments = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('payments')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setPayments(data);
+    setLoading(false);
+  };
+
+  // Fetch stats
+  const fetchStats = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { count: visitors } = await supabase
+      .from('page_visits')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', today.toISOString());
+
+    const { data: approvedPayments } = await supabase
+      .from('payments')
+      .select('price')
+      .eq('status', 'approved');
+
+    const totalRevenue = approvedPayments?.reduce((sum, p) => sum + p.price, 0) || 0;
+    const pendingCount = payments.filter(p => p.status === 'pending').length;
+
+    setStats({
+      todayVisitors: visitors || 0,
+      totalRevenue,
+      pendingCount,
+    });
+  };
+
+  useEffect(() => {
+    if (isAuthorized) {
+      fetchPayments();
+    }
+  }, [isAuthorized]);
+
+  useEffect(() => {
+    if (payments.length > 0) fetchStats();
+  }, [payments]);
+
+  // Realtime subscription for new payments
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const channel = supabase
+      .channel('admin-payments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments' },
+        () => { fetchPayments(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [isAuthorized]);
+
+  const handleApprove = async (paymentId: string) => {
+    const { error } = await supabase
+      .from('payments')
+      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .eq('id', paymentId);
+
+    if (error) {
+      toast.error('승인 실패: ' + error.message);
+    } else {
+      toast.success('결제가 승인되었습니다!');
+      fetchPayments();
     }
   };
 
@@ -71,23 +141,48 @@ export default function AdminDashboard() {
     );
   }
 
-  const pending = payments.filter(p => !p.approved);
-  const approved = payments.filter(p => p.approved);
+  const pending = payments.filter(p => p.status === 'pending');
+  const approved = payments.filter(p => p.status === 'approved');
 
   return (
     <div className="min-h-svh aurora-bg p-4 sm:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="font-serif text-2xl font-bold text-secondary-foreground">🔮 관리자 대시보드</h2>
             <p className="text-sm text-muted-foreground mt-1">하울의 상담소 관리</p>
           </div>
-          <a
-            href="/"
-            className="glass rounded-2xl px-4 py-2 text-sm font-medium text-primary hover:bg-white/60 transition-colors"
-          >
-            상담소로 이동
-          </a>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchPayments}
+              disabled={loading}
+              className="glass rounded-2xl px-3 py-2 text-sm font-medium text-primary hover:bg-white/60 transition-colors flex items-center gap-1"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> 새로고침
+            </button>
+            <a
+              href="/"
+              className="glass rounded-2xl px-4 py-2 text-sm font-medium text-primary hover:bg-white/60 transition-colors"
+            >
+              상담소로 이동
+            </a>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="glass-strong rounded-2xl p-4 text-center glow-border">
+            <p className="text-2xl font-bold text-primary">{stats.todayVisitors}</p>
+            <p className="text-xs text-muted-foreground">오늘 방문자</p>
+          </div>
+          <div className="glass-strong rounded-2xl p-4 text-center glow-border">
+            <p className="text-2xl font-bold text-primary">{stats.totalRevenue.toLocaleString()}원</p>
+            <p className="text-xs text-muted-foreground">총 매출</p>
+          </div>
+          <div className="glass-strong rounded-2xl p-4 text-center glow-border">
+            <p className="text-2xl font-bold text-primary">{stats.pendingCount}</p>
+            <p className="text-xs text-muted-foreground">대기 중</p>
+          </div>
         </div>
 
         {/* Pending */}
@@ -111,19 +206,19 @@ export default function AdminDashboard() {
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                     <div>
                       <p className="font-bold text-foreground">
-                        {pay.userName} — {pay.menuId}번 {pay.menuName}
+                        {pay.user_nickname} — {pay.menu_id}번 {pay.menu_name}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        입금자: {pay.depositor} / {pay.price.toLocaleString()}원 / 📱 {pay.phoneTail || '미입력'}
+                        입금자: {pay.depositor || '미입력'} / {pay.price.toLocaleString()}원 / 📱 {pay.phone_tail || '미입력'}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {pay.method === 'kakaopay' ? '카카오페이' : pay.method === 'bank' ? '무통장' : '프리미엄'} ·{' '}
-                        {new Date(pay.timestamp).toLocaleString('ko-KR')}
+                        {pay.created_at ? new Date(pay.created_at).toLocaleString('ko-KR') : ''}
                       </p>
-                      {pay.questions && (
+                      {pay.questions && Array.isArray(pay.questions) && (
                         <div className="mt-2 text-xs text-muted-foreground">
                           <p className="font-medium">질문:</p>
-                          {pay.questions.map((q, i) => (
+                          {(pay.questions as string[]).map((q: string, i: number) => (
                             <p key={i}>{i + 1}. {q}</p>
                           ))}
                         </div>
@@ -135,8 +230,8 @@ export default function AdminDashboard() {
                           로그 보기
                         </summary>
                         <div className="absolute right-0 mt-2 w-72 max-h-60 overflow-y-auto glass-strong rounded-xl p-3 shadow-lg z-10 text-xs space-y-1">
-                          {pay.chatLog.length > 0 ? (
-                            pay.chatLog.map((log, i) => (
+                          {pay.chat_log && Array.isArray(pay.chat_log) ? (
+                            (pay.chat_log as string[]).map((log: string, i: number) => (
                               <p key={i} className="text-muted-foreground">{log}</p>
                             ))
                           ) : (
@@ -152,20 +247,6 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </div>
-
-                  {/* Premium report area */}
-                  {pay.menuId === 16 && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <label className="text-xs text-muted-foreground font-medium">리포트 작성</label>
-                      <textarea
-                        value={reportText[pay.id] || ''}
-                        onChange={(e) => setReportText(prev => ({ ...prev, [pay.id]: e.target.value }))}
-                        className="w-full mt-1 p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                        rows={4}
-                        placeholder="하울의 심층 리포트를 작성하세요..."
-                      />
-                    </div>
-                  )}
                 </motion.div>
               ))}
             </div>
@@ -182,7 +263,10 @@ export default function AdminDashboard() {
               {approved.map((pay) => (
                 <div key={pay.id} className="glass rounded-2xl p-3 opacity-70">
                   <p className="text-sm text-foreground">
-                    {pay.userName} — {pay.menuName} — {pay.price.toLocaleString()}원
+                    {pay.user_nickname} — {pay.menu_name} — {pay.price.toLocaleString()}원
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {pay.created_at ? new Date(pay.created_at).toLocaleString('ko-KR') : ''}
                   </p>
                 </div>
               ))}
