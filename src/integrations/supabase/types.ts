@@ -55,6 +55,7 @@ export type Database = {
           id: string
           ip_hint: string | null
           is_paid: boolean | null
+          profile_id: string | null
           referrer: string | null
           selected_menu_id: number | null
           session_token: string | null
@@ -67,6 +68,7 @@ export type Database = {
           id?: string
           ip_hint?: string | null
           is_paid?: boolean | null
+          profile_id?: string | null
           referrer?: string | null
           selected_menu_id?: number | null
           session_token?: string | null
@@ -79,6 +81,7 @@ export type Database = {
           id?: string
           ip_hint?: string | null
           is_paid?: boolean | null
+          profile_id?: string | null
           referrer?: string | null
           selected_menu_id?: number | null
           session_token?: string | null
@@ -87,6 +90,13 @@ export type Database = {
           user_nickname?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "chat_sessions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "chat_sessions_selected_menu_id_fkey"
             columns: ["selected_menu_id"]
@@ -137,6 +147,9 @@ export type Database = {
           chat_log: Json | null
           created_at: string | null
           depositor: string | null
+          discount_amount: number | null
+          discount_type: string | null
+          final_price: number | null
           id: string
           menu_id: number | null
           menu_name: string
@@ -153,6 +166,9 @@ export type Database = {
           chat_log?: Json | null
           created_at?: string | null
           depositor?: string | null
+          discount_amount?: number | null
+          discount_type?: string | null
+          final_price?: number | null
           id?: string
           menu_id?: number | null
           menu_name: string
@@ -169,6 +185,9 @@ export type Database = {
           chat_log?: Json | null
           created_at?: string | null
           depositor?: string | null
+          discount_amount?: number | null
+          discount_type?: string | null
+          final_price?: number | null
           id?: string
           menu_id?: number | null
           menu_name?: string
@@ -201,9 +220,11 @@ export type Database = {
         Row: {
           category: string
           category_name: string
+          counselor_id: string | null
           created_at: string | null
           description: string | null
           detail_description: string | null
+          duration_minutes: number | null
           enabled: boolean | null
           icon: string | null
           id: number
@@ -218,9 +239,11 @@ export type Database = {
         Insert: {
           category?: string
           category_name?: string
+          counselor_id?: string | null
           created_at?: string | null
           description?: string | null
           detail_description?: string | null
+          duration_minutes?: number | null
           enabled?: boolean | null
           icon?: string | null
           id?: number
@@ -235,9 +258,11 @@ export type Database = {
         Update: {
           category?: string
           category_name?: string
+          counselor_id?: string | null
           created_at?: string | null
           description?: string | null
           detail_description?: string | null
+          duration_minutes?: number | null
           enabled?: boolean | null
           icon?: string | null
           id?: number
@@ -250,6 +275,63 @@ export type Database = {
           welcome_guide?: string | null
         }
         Relationships: []
+      }
+      reviews: {
+        Row: {
+          content: string
+          created_at: string | null
+          credits_awarded: boolean | null
+          id: string
+          is_approved: boolean | null
+          masked_name: string
+          menu_name: string | null
+          profile_id: string | null
+          rating: number | null
+          session_id: string | null
+          user_nickname: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          credits_awarded?: boolean | null
+          id?: string
+          is_approved?: boolean | null
+          masked_name: string
+          menu_name?: string | null
+          profile_id?: string | null
+          rating?: number | null
+          session_id?: string | null
+          user_nickname: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          credits_awarded?: boolean | null
+          id?: string
+          is_approved?: boolean | null
+          masked_name?: string
+          menu_name?: string | null
+          profile_id?: string | null
+          rating?: number | null
+          session_id?: string | null
+          user_nickname?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       site_config: {
         Row: {
@@ -269,6 +351,51 @@ export type Database = {
           key?: string
           updated_at?: string | null
           value?: Json
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          birth_date: string | null
+          birth_time: string | null
+          birth_type: string | null
+          coupon_used: boolean | null
+          created_at: string | null
+          credits: number
+          gender: string | null
+          id: string
+          nickname: string | null
+          phone: string
+          pin: string
+          updated_at: string | null
+        }
+        Insert: {
+          birth_date?: string | null
+          birth_time?: string | null
+          birth_type?: string | null
+          coupon_used?: boolean | null
+          created_at?: string | null
+          credits?: number
+          gender?: string | null
+          id?: string
+          nickname?: string | null
+          phone: string
+          pin: string
+          updated_at?: string | null
+        }
+        Update: {
+          birth_date?: string | null
+          birth_time?: string | null
+          birth_type?: string | null
+          coupon_used?: boolean | null
+          created_at?: string | null
+          credits?: number
+          gender?: string | null
+          id?: string
+          nickname?: string | null
+          phone?: string
+          pin?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
