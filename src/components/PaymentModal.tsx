@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { Menu } from '@/data/menus';
 import { X } from 'lucide-react';
@@ -9,13 +9,27 @@ interface PaymentModalProps {
   userName: string;
   onClose: () => void;
   onPaymentSubmit: (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => void;
+  couponActive?: boolean;
+  userCredits?: number;
 }
 
-export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit }: PaymentModalProps) {
+export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit, couponActive, userCredits = 0 }: PaymentModalProps) {
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
+  const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits'>('none');
   const s = loadSettings();
+
+  const canUseCoupon = couponActive && menu.price >= 9900;
+  const canUseCredits = userCredits > 0 && menu.price >= 9900;
+
+  let finalPrice = menu.price;
+  if (discountType === 'coupon' && canUseCoupon) {
+    finalPrice = menu.price - 3000;
+  } else if (discountType === 'credits' && canUseCredits) {
+    const creditDiscount = Math.min(userCredits, menu.price);
+    finalPrice = menu.price - creditDiscount;
+  }
 
   const handleKakaoPay = () => {
     window.open(s.kakaoPayLink, '_blank');
@@ -37,21 +51,73 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-          className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border"
+          className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border max-h-[90vh] overflow-y-auto scrollbar-hide"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/50 transition-colors"
-          >
+          <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/50 transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
 
           <div className="text-center mb-5">
             <span className="text-3xl mb-2 block">{menu.icon}</span>
             <h3 className="font-serif text-lg font-bold text-secondary-foreground">{menu.name}</h3>
-            <p className="text-2xl font-bold text-primary mt-1">{menu.price.toLocaleString()}원</p>
+            <p className="text-2xl font-bold text-primary mt-1">
+              {finalPrice.toLocaleString()}원
+              {finalPrice !== menu.price && (
+                <span className="text-sm text-muted-foreground line-through ml-2">{menu.price.toLocaleString()}원</span>
+              )}
+            </p>
           </div>
+
+          {/* Discount options */}
+          {(canUseCoupon || canUseCredits) && (
+            <div className="mb-4 space-y-2">
+              <p className="text-xs font-semibold text-foreground">💝 할인 혜택 (택 1)</p>
+              
+              {canUseCoupon && (
+                <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'coupon' ? 'ring-2 ring-primary' : ''}`}>
+                  <input
+                    type="radio"
+                    name="discount"
+                    checked={discountType === 'coupon'}
+                    onChange={() => setDiscountType('coupon')}
+                    className="accent-primary"
+                  />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">하울랜드 3,000원 할인</p>
+                    <p className="text-[10px] text-muted-foreground">자동 적용 쿠폰</p>
+                  </div>
+                </label>
+              )}
+
+              {canUseCredits && (
+                <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'credits' ? 'ring-2 ring-primary' : ''}`}>
+                  <input
+                    type="radio"
+                    name="discount"
+                    checked={discountType === 'credits'}
+                    onChange={() => setDiscountType('credits')}
+                    className="accent-primary"
+                  />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">적립금 사용</p>
+                    <p className="text-[10px] text-muted-foreground">보유: {userCredits.toLocaleString()}원</p>
+                  </div>
+                </label>
+              )}
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'none' ? 'ring-2 ring-primary' : ''}`}>
+                <input
+                  type="radio"
+                  name="discount"
+                  checked={discountType === 'none'}
+                  onChange={() => setDiscountType('none')}
+                  className="accent-primary"
+                />
+                <p className="text-xs text-muted-foreground">할인 없이 결제</p>
+              </label>
+            </div>
+          )}
 
           {step === 'select' ? (
             <div className="space-y-3">
@@ -80,7 +146,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
                 onClick={handleKakaoPay}
                 className="w-full py-3 rounded-2xl bg-[#FEE500] text-[#3C1E1E] font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
               >
-                카카오페이로 결제하기
+                카카오페이로 결제하기 ({finalPrice.toLocaleString()}원)
               </button>
               <button
                 onClick={() => setStep('bank')}
@@ -106,7 +172,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">금액</span>
-                  <span className="font-bold text-primary">{menu.price.toLocaleString()}원</span>
+                  <span className="font-bold text-primary">{finalPrice.toLocaleString()}원</span>
                 </div>
               </div>
               <button
@@ -127,6 +193,9 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit 
           <div className="mt-4 pt-3 border-t border-border">
             <p className="text-[9px] text-muted-foreground text-center leading-relaxed">
               {s.refundPolicy}
+            </p>
+            <p className="text-[8px] text-muted-foreground/60 text-center mt-1">
+              본 서비스는 데이터 분석 기반 에듀테인먼트 콘텐츠입니다.
             </p>
           </div>
         </motion.div>
