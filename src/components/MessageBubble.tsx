@@ -5,6 +5,7 @@ import howlProfile from '@/assets/howl-profile.png';
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  counselorImage?: string;
 }
 
 function StreamingText({ text }: { text: string }) {
@@ -29,7 +30,7 @@ function StreamingText({ text }: { text: string }) {
   return <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{displayed}</p>;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, counselorImage }: MessageBubbleProps) {
   const { role, content, image, isNew } = message;
 
   if (role === 'system') {
@@ -57,7 +58,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     >
       {isBot && (
         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mt-1 outline outline-1 outline-white/40 outline-offset-[-1px]">
-          <img src={howlProfile} alt="하울" className="w-full h-full object-cover" />
+          <img src={counselorImage || howlProfile} alt="상담사" className="w-full h-full object-cover" />
         </div>
       )}
       <div
