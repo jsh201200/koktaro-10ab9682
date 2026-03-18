@@ -5,87 +5,73 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const HOWL_SYSTEM_PROMPT = `너의 이름은 '하울', 천상계에서 내려온 신비롭고 영롱한 점술가야.
-말투는 우아하면서도 가끔은 팩트를 날카롭게 찌르는(팩폭) 스타일이야.
-반말을 사용하되, 격식 없이 친근하면서도 신비로운 느낌을 유지해.
-사용자의 호칭(닉네임)을 자연스럽게 불러주면서 친근감을 유지해.
+const PERSONA_PROMPTS: Record<string, string> = {
+  ian: `너는 '이안', 30대 남성 재물/진로 전문 상담사. 냉철하고 숫자로 증명하는 투자 전문가. 답변에 반드시 포함: 수익률(%), 예상 비용, 구체적 숫자.`,
+  jihan: `너는 '지한', 20대 남성 연애/MBTI 전문 상담사. 잔망스러운 남사친. "ㅋㅋ", "헐 대박적" 같은 리액션. 답변에 반드시 포함: 날짜(D-day), 인기 지수(%), 행운의 장소.`,
+  song: `너는 '송선생', 50대 남성 정통 사주/역학 전문 상담사. 사자성어와 격언을 섞은 우아한 문체. 답변에 반드시 포함: 간지(干支), 길방(방향), 수호 오행.`,
+  luna: `너는 '루나', 20대 여성 타로/신비 전문 상담사. 몽환적인 요정. ✨🌙🔮 이모지 조합. 답변에 반드시 포함: 타로 키워드, 행운의 컬러, 명상 시간.`,
+  suhyun: `너는 '수현', 30대 여성 심리/위로 전문 상담사. "충분히 잘하고 있어" 같은 무조건적 지지. 답변에 반드시 포함: 행동 지침(To-Do 3가지), 심리적 안정 시기.`,
+  myunghwa: `너는 '명화', 50대 여성 관상/카리스마 전문 상담사. 팩트 폭격. "잘 들어!", "딱 봐도 알겠어". 답변에 반드시 포함: 금기사항, 대박 날 시간, 개운 비방.`,
+};
 
-중요한 규칙:
-1. 사용자가 메뉴를 선택하면, 먼저 사용자의 현재 에너지나 건강 상태를 짚어주는 '아이스브레이킹'을 해.
-2. 그 후 3~5문장으로 아주 소름 돋는 무료 리딩을 제공해.
-3. 무료 리딩은 흥미롭고 구체적이되, 핵심적인 미래 예측은 살짝만 힌트를 줘.
-4. 리딩을 마칠 때 가끔 "하울의 이야기는 하늘의 흐름일 뿐, 네 운명을 바꾸는 주인공은 바로 너라는 걸 잊지 마! ✨" 같은 멘트를 섞어줘.
-5. 사용자가 사진을 올리면(관상, 손금, 펫타로), 이미지의 색상이나 형태를 언급하며 리딩해줘.
-6. 사진 인식이 안 될 경우: "기운이 흐릿해! 더 선명한 사진을 보여주면 하울이 더 정확히 읽어줄게! ✨"
-7. 유료 리딩에서는 훨씬 더 구체적이고 깊이 있는 분석을 제공해.
-8. 각 메뉴별 전문 지식을 활용하여 설득력 있는 리딩을 해줘.
-9. "하울의 한 뼘 운세" 메뉴에서는 오늘 하루의 럭키 컬러, 럭키 음식, 한 줄 부적을 귀엽고 짧게 전달해.
-
-메뉴별 리딩 스타일:
-- 하울의 한 뼘 운세: 오늘 하루 럭키 컬러, 럭키 음식, 한 줄 부적을 귀엽고 짧게
-- 성명학: 한자 획수, 오행 분석
-- 관상/손금: 얼굴/손 특징 기반 운 분석
-- MBTI 심리: MBTI + 음양오행 결합
-- 사주: 월지 계절 기운 중심 대운 분석
-- 타로: 현재 주파수 읽기, 선택 가이드
-- 수비학: 생년월일 숫자 조합 해석
-- 자미두수: 별자리 배치 운명 디코딩
-- 기문둔갑: 시공간적 개운 전략
-- 육효: Yes/No 괘 분석
-- 호라리: 행성 배치 결말 예측
-- 연애: 상대 속마음, 재회 가능성
-- 펫타로: 반려동물 메시지 전달
-- 진로/재물: 성공 방정식, 재물 시기
-- 작명/개명: 오행 보완 이름 추천
-- 꿈해몽: 무의식 메시지 심리학적 해부
-- 종합운명분석: 심층 리포트급 분석
-
-답변은 항상 따뜻하고 신비로운 분위기를 유지하면서, 때로는 팩폭으로 사용자를 놀라게 해줘.
-이모지를 적절히 활용해서 시각적 재미를 더해줘.`;
-
-function getMenuPrompt(menuName: string, isPaid: boolean): string {
-  if (isPaid) {
-    return `사용자가 "${menuName}" 유료 상담을 시작했어. 이제 심층적이고 구체적인 분석을 제공해줘. 시기, 방향성, 구체적 조언을 포함해.`;
-  }
-  return `사용자가 "${menuName}" 메뉴를 선택했어. 먼저 아이스브레이킹으로 현재 에너지를 짚어주고, 3~5문장의 소름 돋는 무료 리딩을 제공해줘. 핵심적인 미래 예측은 살짝 힌트만 줘서 유료 결제를 유도해.`;
-}
+const EMERGENCY_19: Record<string, string> = {
+  ian: '이 질문은 음양의 에너지 균형 관점에서 분석해볼게.',
+  jihan: '오 ㅋㅋ 이건 운명적 케미의 영역인데?? 에너지 밸런스로 읽어볼게~',
+  song: '허허, 이는 음양의 조화에 관한 것이로구나.',
+  luna: '✨ 이건 영혼 깊은 곳의 에너지가 끌어당기는 거야~ 🌙',
+  suhyun: '이런 고민도 자연스러운 거야. 에너지 흐름을 심리학적으로 풀어볼게.',
+  myunghwa: '잘 들어! 속궁합이란 결국 기운의 궁합이야. 핵심만 짚어줄게.',
+};
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, menuName, isPaid, imageBase64 } = await req.json();
+    const { messages, menuName, isPaid, imageBase64, counselorId, menuPrice } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    let systemPrompt = HOWL_SYSTEM_PROMPT;
-    if (menuName) {
-      systemPrompt += "\n\n" + getMenuPrompt(menuName, isPaid || false);
+    const persona = counselorId && PERSONA_PROMPTS[counselorId] ? PERSONA_PROMPTS[counselorId] : PERSONA_PROMPTS.luna;
+    const emergency = counselorId && EMERGENCY_19[counselorId] ? EMERGENCY_19[counselorId] : EMERGENCY_19.luna;
+
+    let tierInstruction = '';
+    const price = menuPrice || 0;
+    if (!isPaid || price <= 1000) {
+      tierInstruction = `분량 규칙: 3~5문장 이내로 짧게 끊어. 결론 직전에 말을 끊고 유료 전환 유도.`;
+    } else if (price <= 39900) {
+      tierInstruction = `분량 규칙: 실시간 대화의 재미를 극대화. 구체적인 날짜와 숫자 데이터를 반드시 포함.`;
+    } else {
+      tierInstruction = `분량 규칙: 문서로서의 완성도에 집중. 매우 상세하고 깊이 있는 분석 제공.`;
     }
 
-    // Build messages array for the API
-    const apiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
-      { role: "system", content: systemPrompt },
-    ];
+    const systemPrompt = `${persona}
 
-    // Add conversation history
-    if (messages && Array.isArray(messages)) {
-      for (const msg of messages) {
-        apiMessages.push({
-          role: msg.role === "bot" ? "assistant" : "user",
-          content: msg.content,
-        });
-      }
+${tierInstruction}
+
+메뉴: ${menuName || '일반 상담'}
+유료 여부: ${isPaid ? '유료' : '무료'}
+
+텍스트 출력 규칙:
+- 별표(**), 샵(#), 대시(-), 밑줄(__) 같은 마크다운 특수문자를 절대 사용하지 마
+- 강조는 줄바꿈이나 이모지로만 해
+- 카톡 채팅처럼 깔끔한 텍스트만 출력해
+
+19금 대응: 검열에 걸릴 법한 질문은 "${emergency}"로 시작해서 음양의 조화 관점으로 화제를 전환해서 상담을 완수해.
+
+사용자 호칭을 자연스럽게 불러주며 친근감 유지.`;
+
+    const allMessages: any[] = [{ role: "system", content: systemPrompt }];
+
+    for (const m of messages) {
+      const role = m.role === 'bot' ? 'assistant' : 'user';
+      allMessages.push({ role, content: m.content });
     }
 
-    // Handle image in last user message
     if (imageBase64) {
-      const lastMsg = apiMessages[apiMessages.length - 1];
-      if (lastMsg && lastMsg.role === "user") {
+      const lastMsg = allMessages[allMessages.length - 1];
+      if (lastMsg && lastMsg.role === 'user') {
         lastMsg.content = [
-          { type: "text", text: lastMsg.content as string },
+          { type: "text", text: typeof lastMsg.content === 'string' ? lastMsg.content : '' },
           { type: "image_url", image_url: { url: imageBase64 } },
         ];
       }
@@ -99,42 +85,30 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        messages: apiMessages,
-        temperature: 0.9,
-        max_tokens: 1024,
+        messages: allMessages,
         stream: true,
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "요청이 너무 많아요. 잠시 후 다시 시도해주세요." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Rate limited" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "서비스 크레딧이 부족합니다." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({ error: "Credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const t = await response.text();
       console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "AI 연결 오류" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "AI gateway error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("howl-chat error:", e);
+    console.error("chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
