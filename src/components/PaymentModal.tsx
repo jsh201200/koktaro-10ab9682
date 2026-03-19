@@ -45,7 +45,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
         className="fixed inset-0 z-[70] flex items-center justify-center p-4"
         onClick={onClose}
       >
-        <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -54,13 +54,13 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
           className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border max-h-[90vh] overflow-y-auto scrollbar-hide"
           onClick={(e) => e.stopPropagation()}
         >
-          <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-white/50 transition-colors">
+          <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-muted/50 transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
 
           <div className="text-center mb-5">
             <span className="text-3xl mb-2 block">{menu.icon}</span>
-            <h3 className="font-serif text-lg font-bold text-secondary-foreground">{menu.name}</h3>
+            <h3 className="font-display text-lg font-bold text-foreground">{menu.name}</h3>
             <p className="text-2xl font-bold text-primary mt-1">
               {finalPrice.toLocaleString()}원
               {finalPrice !== menu.price && (
@@ -126,7 +126,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
                 <input
                   value={depositor}
                   onChange={(e) => setDepositor(e.target.value)}
-                  className="w-full p-2.5 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full p-2.5 rounded-xl glass text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                   placeholder="입금자명 입력"
                 />
                 <p className="text-[10px] text-destructive">⚠️ 입금자명이 다르면 확인이 늦어질 수 있어!</p>
@@ -136,7 +136,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
                 <input
                   value={phoneTail}
                   onChange={(e) => setPhoneTail(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  className="w-full p-2.5 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full p-2.5 rounded-xl glass text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                   placeholder="0000"
                   maxLength={4}
                 />
@@ -150,7 +150,7 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
               </button>
               <button
                 onClick={() => setStep('bank')}
-                className="w-full py-3 rounded-2xl glass text-foreground font-semibold text-sm hover:bg-white/70 transition-all active:scale-[0.98]"
+                className="w-full py-3 rounded-2xl glass text-foreground font-semibold text-sm hover:bg-muted/70 transition-all active:scale-[0.98]"
               >
                 무통장 입금
               </button>

@@ -11,56 +11,49 @@ export interface MenuSetting {
 }
 
 export interface SiteSettings {
-  // Branding
   siteName: string;
   siteSubtitle: string;
   logoUrl: string;
   fontBody: string;
   fontSerif: string;
 
-  // Colors (aurora gradient)
   bgGradientStart: string;
   bgGradientMid1: string;
   bgGradientMid2: string;
   bgGradientEnd: string;
   primaryColor: string;
 
-  // Links
   kakaoPayLink: string;
   kakaoChannelLink: string;
   discordWebhook: string;
 
-  // Bank info
   bankName: string;
   bankAccount: string;
   bankHolder: string;
 
-  // Menus (override per menu)
   menuOverrides: Record<number, Partial<MenuSetting>>;
 
-  // Footer / legal
   disclaimerText: string;
   refundPolicy: string;
-
-  // Welcome message
   welcomeMessage: string;
-
-  // Admin password
   adminPassword: string;
+
+  // Beta mode: skip real payment
+  betaMode: boolean;
 }
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  siteName: '하울의 챗봇상담소',
-  siteSubtitle: '천상계 점술 상담',
+  siteName: '콕타로',
+  siteSubtitle: '당신의 운명을 콕 집어줄게',
   logoUrl: '',
-  fontBody: 'Noto Sans KR',
-  fontSerif: 'Noto Serif KR',
+  fontBody: 'Pretendard',
+  fontSerif: 'Cormorant Garamond',
 
-  bgGradientStart: '#FDFCFB',
-  bgGradientMid1: '#E2D1F9',
-  bgGradientMid2: '#F5E3E6',
-  bgGradientEnd: '#FDFCFB',
-  primaryColor: '#6B3FA0',
+  bgGradientStart: '#0f0a1a',
+  bgGradientMid1: '#1a1030',
+  bgGradientMid2: '#150d20',
+  bgGradientEnd: '#0f0a1a',
+  primaryColor: '#8B5CF6',
 
   kakaoPayLink: 'https://qr.kakaopay.com/Ej82jM60H',
   kakaoChannelLink: 'https://pf.kakao.com/_cLdxhX',
@@ -75,9 +68,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   disclaimerText: '본 상담은 엔터테인먼트 콘텐츠이며, 의학적·법률적·재무적 자문을 대체할 수 없습니다.',
   refundPolicy: '디지털 콘텐츠 특성상 리딩 시작 후 환불이 불가합니다.',
 
-  welcomeMessage: '안녕! 하울의 상담소에 온 걸 환영해. ✨\n\n너의 기운을 느끼기 전에, 내가 너를 뭐라고 부르면 좋을지 알려줄래?',
+  welcomeMessage: '안녕! 콕타로에 온 걸 환영해 ✨\n\n너의 기운을 느끼기 전에, 내가 너를 뭐라고 부르면 좋을지 알려줄래?',
 
   adminPassword: '9304',
+
+  betaMode: true,
 };
 
 const STORAGE_KEY = 'howl_site_settings';
@@ -94,7 +89,6 @@ export function loadSettings(): SiteSettings {
 
 export function saveSettings(settings: SiteSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  // Dispatch event so other components can react
   window.dispatchEvent(new CustomEvent('howl-settings-changed', { detail: settings }));
 }
 

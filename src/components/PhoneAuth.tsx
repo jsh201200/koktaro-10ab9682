@@ -44,7 +44,26 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
   };
 
   const handleVerifyPin = async () => {
+    if (!existingProfile) return;
+    
     if (pin === existingProfile.pin) {
+      // Clear any cached session that doesn't belong to this user
+      const cachedSessionId = localStorage.getItem('howl_session_id');
+      if (cachedSessionId) {
+        // Verify cached session belongs to this profile
+        const { data: sessionData } = await supabase
+          .from('chat_sessions')
+          .select('profile_id')
+          .eq('id', cachedSessionId)
+          .single();
+        
+        if (!sessionData || sessionData.profile_id !== existingProfile.id) {
+          // Session doesn't belong to this user - clear it
+          localStorage.removeItem('howl_session_id');
+        }
+      }
+      
+      localStorage.setItem('howl_profile_id', existingProfile.id);
       onAuth({
         id: existingProfile.id,
         phone: existingProfile.phone,
@@ -76,9 +95,6 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     }
 
     const cleanPhone = phone.replace(/-/g, '');
-    const maskedName = nickname.length >= 2
-      ? nickname[0] + '*'.repeat(nickname.length - 1) + '님'
-      : nickname + '님';
 
     const { data, error } = await supabase
       .from('user_profiles')
@@ -95,6 +111,10 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       return;
     }
 
+    // Clear any old session cache for fresh start
+    localStorage.removeItem('howl_session_id');
+    localStorage.setItem('howl_profile_id', data.id);
+
     onAuth({
       id: data.id,
       phone: cleanPhone,
@@ -110,7 +130,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-[80] flex items-center justify-center p-4"
     >
-      <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
       <motion.div
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
@@ -118,7 +138,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       >
         <div className="text-center mb-5">
           <span className="text-3xl mb-2 block">🔮</span>
-          <h3 className="font-serif text-lg font-bold text-secondary-foreground">하울의 챗봇상담소</h3>
+          <h3 className="font-display text-xl font-bold text-foreground neon-glow">KOK TAROT</h3>
           <p className="text-xs text-muted-foreground mt-1">
             {step === 'phone' && '전화번호로 간편하게 시작해요'}
             {step === 'verify_pin' && '비밀번호를 입력해주세요'}
@@ -132,7 +152,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             <input
               value={phone}
               onChange={e => setPhone(formatPhone(e.target.value))}
-              className="w-full p-3 rounded-2xl glass text-center text-lg tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full p-3 rounded-2xl glass text-center text-lg tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="010-0000-0000"
               type="tel"
               autoFocus
@@ -161,7 +181,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
                 const v = e.target.value.replace(/\D/g, '').slice(0, 4);
                 setPin(v);
               }}
-              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="····"
               type="password"
               maxLength={4}
@@ -191,7 +211,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
                 const v = e.target.value.replace(/\D/g, '').slice(0, 4);
                 setPin(v);
               }}
-              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="····"
               type="password"
               maxLength={4}
@@ -213,7 +233,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             <input
               value={nickname}
               onChange={e => setNickname(e.target.value)}
-              className="w-full p-3 rounded-2xl glass text-center text-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full p-3 rounded-2xl glass text-center text-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="호칭을 입력해주세요"
               autoFocus
             />

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { COUNSELORS, getCounselorForMenu } from '@/data/counselors';
-import { ChevronRight, Star, Gift, Sparkles } from 'lucide-react';
+import { Star, Gift, Sparkles } from 'lucide-react';
 
 interface Product {
   menu_id: number;
@@ -12,7 +12,6 @@ interface Product {
   category: string;
   category_name: string;
   description: string | null;
-  detail_description: string | null;
   enabled: boolean | null;
   is_snack: boolean | null;
   counselor_id: string | null;
@@ -36,28 +35,20 @@ interface LandingPageProps {
 }
 
 export default function LandingPage({ onStartChat, couponActive, userCredits, userName, onCheckCredits }: LandingPageProps) {
-  const [products, setProducts] = useState<Product[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      const [{ data: prods }, { data: revs }] = await Promise.all([
-        supabase.from('products').select('*').eq('enabled', true).order('sort_order'),
-        supabase.from('reviews').select('*').eq('is_approved', true).order('created_at', { ascending: false }).limit(10),
-      ]);
-      if (prods) setProducts(prods as any);
+      const { data: revs } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false })
+        .limit(10);
       if (revs) setReviews(revs as any);
     };
     fetchData();
   }, []);
-
-  const categories = ['A', 'B', 'C', 'D'];
-  const categoryLabels: Record<string, string> = {
-    A: '🌟 입구 · 본질 분석',
-    B: '🔮 메인 · 심층 리딩',
-    C: '⭐ 스페셜 · 특정 고민',
-    D: '💎 프리미엄',
-  };
 
   return (
     <div className="min-h-svh aurora-bg">
@@ -66,44 +57,46 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         <motion.div
           initial={{ y: -40 }}
           animate={{ y: 0 }}
-          className="sticky top-0 z-50 bg-gradient-to-r from-primary to-glow-purple text-primary-foreground text-center py-2.5 px-4 text-xs font-semibold"
+          className="sticky top-0 z-50 bg-gradient-to-r from-primary to-glow-pink text-primary-foreground text-center py-2.5 px-4 text-xs font-semibold"
         >
           💫 하울랜드에서 오신 당신! 9,900원 이상 결제 시 3,000원 자동 할인 중
         </motion.div>
       )}
 
       {/* Hero Banner */}
-      <section className="relative overflow-hidden px-4 pt-12 pb-8">
+      <section className="relative overflow-hidden px-4 pt-14 pb-8">
         <div className="max-w-2xl mx-auto text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="font-serif text-3xl sm:text-4xl font-bold text-secondary-foreground mb-3">
-              하울의 챗봇상담소
+            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase mb-2">KOK TAROT</p>
+            <h1 className="font-display text-4xl sm:text-5xl font-bold text-foreground mb-3 neon-glow">
+              콕타로
             </h1>
-            <p className="text-sm text-muted-foreground mb-6">
-              천상계 6인의 도사가 당신의 운명을 읽어드립니다
+            <p className="text-sm text-muted-foreground mb-8">
+              당신의 운명을 콕 집어줄게
             </p>
           </motion.div>
 
-          {/* Counselor Avatars Row */}
-          <div className="flex justify-center gap-3 mb-6">
+          {/* Counselor Avatars */}
+          <div className="flex justify-center gap-4 mb-8">
             {COUNSELORS.map((c, i) => (
-              <motion.div
+              <motion.button
                 key={c.id}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.1 }}
-                className="text-center"
+                onClick={() => onStartChat()}
+                className="text-center group"
               >
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden shadow-lg outline outline-2 outline-primary/30 outline-offset-1 mx-auto">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden shadow-lg ring-2 ring-primary/30 ring-offset-2 ring-offset-background mx-auto group-hover:ring-primary/60 transition-all">
                   <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
                 </div>
-                <p className="text-[10px] font-semibold text-foreground mt-1">{c.name}</p>
-                <p className="text-[8px] text-muted-foreground">{c.specialty}</p>
-              </motion.div>
+                <p className="text-[11px] font-semibold text-foreground mt-1.5">{c.name}</p>
+                <p className="text-[9px] text-muted-foreground">{c.specialty}</p>
+              </motion.button>
             ))}
           </div>
 
@@ -131,20 +124,19 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                   <p className="text-xs text-muted-foreground">{userName}님의 혜택</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-primary">{userCredits.toLocaleString()}원</span>
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </div>
+              <span className="text-lg font-bold text-primary">{userCredits.toLocaleString()}원</span>
             </button>
           </div>
         </section>
       )}
 
       {/* Best Reviews */}
-      {reviews.length > 0 && (
-        <section className="px-4 pb-6">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="font-serif text-lg font-bold text-secondary-foreground mb-3 px-1">⭐ 베스트 후기</h2>
+      <section className="px-4 pb-6">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="font-display text-lg font-bold text-foreground mb-3 px-1 flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" /> 베스트 후기
+          </h2>
+          {reviews.length > 0 ? (
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
               {reviews.map(r => (
                 <div key={r.id} className="glass-strong rounded-2xl p-4 min-w-[240px] max-w-[280px] flex-shrink-0 glow-border">
@@ -161,54 +153,12 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                 </div>
               ))}
             </div>
-          </div>
-        </section>
-      )}
-
-      {/* Menu Cards by Category */}
-      <section className="px-4 pb-8">
-        <div className="max-w-2xl mx-auto">
-          {categories.map(cat => {
-            const items = products.filter(p => p.category === cat);
-            if (items.length === 0) return null;
-            return (
-              <div key={cat} className="mb-6">
-                <h2 className="font-serif text-sm font-bold text-primary tracking-wider mb-3 px-1">
-                  {categoryLabels[cat]}
-                </h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {items.map(p => {
-                    const counselor = getCounselorForMenu(p.menu_id);
-                    return (
-                      <motion.button
-                        key={p.menu_id}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => onStartChat(p.menu_id)}
-                        className={`glass-strong rounded-2xl p-3 text-left glow-border hover:shadow-lg transition-all ${p.is_snack ? 'border-2 border-dashed border-primary/30' : ''}`}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-md">
-                            <img src={counselor.image} alt={counselor.name} className="w-full h-full object-cover" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm">{p.icon}</span>
-                              <h3 className="text-xs font-bold text-foreground truncate">{p.name}</h3>
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{p.description}</p>
-                            <div className="flex items-center justify-between mt-1.5">
-                              <span className="text-[10px] text-muted-foreground">{counselor.name}</span>
-                              <span className="text-xs font-bold text-primary">{p.price.toLocaleString()}원</span>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+          ) : (
+            <div className="glass-strong rounded-2xl p-6 text-center glow-border">
+              <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">첫 후기를 남기고 적립금을 받아보세요! ✨</p>
+            </div>
+          )}
         </div>
       </section>
 
