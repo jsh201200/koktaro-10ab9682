@@ -23,7 +23,6 @@ import { Settings } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
-const KAKAO_CHANNEL = 'https://pf.kakao.com/_cLdxhX';
 const TYPING_DELAY_MS = 2000;
 
 interface UserProfile {
@@ -56,11 +55,11 @@ export default function HowlChat() {
   const [timerExpired, setTimerExpired] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [showBetaModal, setShowBetaModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
 
-  // Coupon from URL
   const couponActive = searchParams.get('coupon') === 'HOWL3000';
 
   // Load products from DB
@@ -72,7 +71,9 @@ export default function HowlChat() {
     loadProducts();
   }, []);
 
-  // Check for existing profile in localStorage
+  // Check for existing profile — REQUIRE PIN re-verification
+  // We only auto-restore profile if the profile_id is in localStorage
+  // The actual session data is only loaded after PIN verification in PhoneAuth
   useEffect(() => {
     const profileId = localStorage.getItem('howl_profile_id');
     if (profileId) {
@@ -111,7 +112,7 @@ export default function HowlChat() {
     }
   }, [view, messages.length]);
 
-  // Session timer with DB duration
+  // Session timer
   useEffect(() => {
     if (session.sessionExpiry && session.isPaid) {
       setTimerExpired(false);
@@ -123,7 +124,7 @@ export default function HowlChat() {
         }
         if (remaining <= 0) {
           setTimerExpired(true);
-          addSystemMessage("⏰ 상담 시간이 종료되었습니다. 연장을 원하시면 결제해주세요.");
+          addSystemMessage("⏰ 상담 시간이 종료되었습니다.");
           if (timerRef.current) clearInterval(timerRef.current);
         }
       }, 1000);
@@ -144,35 +145,39 @@ export default function HowlChat() {
       }, (payload) => {
         const updated = payload.new as any;
         if (updated.status === 'approved') {
-          // Get duration from DB product
           const product = dbProducts.find(p => p.menu_id === updated.menu_id);
           const durationMin = product?.duration_minutes || 30;
-
-          updateSession({
-            isPaid: true,
-            sessionExpiry: Date.now() + durationMin * 60 * 1000,
-            maxQuestions: updated.menu_id === 16 ? 3 : 1,
-            questionCount: 0,
-            paymentPending: false,
-          });
-          setTimerExpired(false);
-          addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
-          toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
-
-          const counselor = getCounselorForMenu(updated.menu_id);
-          handleBotResponse(
-            `${session.userName}님의 결제가 확인되었어! 이제 심층 리딩을 시작할게.`,
-            updated.menu_name,
-            true,
-            undefined,
-            counselor.id,
-            updated.price
-          );
+          activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [session.dbSessionId, session.userName, dbProducts]);
+
+  const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
+    updateSession({
+      isPaid: true,
+      sessionExpiry: Date.now() + durationMin * 60 * 1000,
+      maxQuestions: menuId === 16 ? 3 : 1,
+      questionCount: 0,
+      paymentPending: false,
+    });
+    setTimerExpired(false);
+    setShowBetaModal(false);
+    addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
+    toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
+
+    const counselor = getCounselorForMenu(menuId);
+    const name = session.userName || userProfile?.nickname || '';
+    handleBotResponse(
+      `${name}님의 결제가 확인되었어! 이제 심층 리딩을 시작할게.`,
+      menuName,
+      true,
+      undefined,
+      counselor.id,
+      price
+    );
+  };
 
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
@@ -220,20 +225,24 @@ export default function HowlChat() {
         setIsTyping(true);
         await delayedTyping();
         setIsTyping(false);
-        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n너의 기운이 살랑살랑 느껴지기 시작했어. 어떤 운명의 문을 열어볼까?\n\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
         return;
       }
       addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
       return;
     }
 
-    // Timer expired
+    // Timer expired — show beta bypass or payment
     if (timerExpired) {
-      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
+      if (settings.betaMode) {
+        setShowBetaModal(true);
+      } else {
+        addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
+      }
       return;
     }
 
-    // Check session limits
+    // Session limits
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
@@ -245,7 +254,7 @@ export default function HowlChat() {
       updateSession({ questionCount: session.questionCount + 1 });
     }
 
-    // Scan animation for face/palm reading
+    // Scan animation
     if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
       setShowScan(image);
       return;
@@ -262,10 +271,9 @@ export default function HowlChat() {
       session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
     );
 
-    // After free reading, offer payment with DB price
+    // After free reading, offer payment
     if (session.selectedMenu && !session.isPaid && !session.freeReadingDone) {
       updateSession({ freeReadingDone: true });
-      const dbPrice = getDbPrice(session.selectedMenu.id);
       setTimeout(() => {
         addBotMessage(`이 기운의 핵심은 심층 리딩에서만 볼 수 있어! 💎\n\n지금 바로 확인해볼래?`);
       }, 1500);
@@ -275,7 +283,6 @@ export default function HowlChat() {
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
-    // Get latest price from DB
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
     const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
 
@@ -321,6 +328,15 @@ export default function HowlChat() {
     );
   };
 
+  // Beta mode: free bypass
+  const handleBetaBypass = () => {
+    if (!session.selectedMenu) return;
+    const product = dbProducts.find(p => p.menu_id === session.selectedMenu!.id);
+    const durationMin = product?.duration_minutes || 30;
+    activatePaidMode(durationMin, session.selectedMenu.id, session.selectedMenu.name, 0);
+    toast.success("🎉 무료 베타 테스트 모드로 상담을 이어갑니다!");
+  };
+
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
     const menu = session.selectedMenu!;
     setShowPayment(false);
@@ -330,7 +346,6 @@ export default function HowlChat() {
     let discountType = '';
     let finalPrice = dbPrice;
 
-    // Coupon logic: only for 9900+ products, mutually exclusive with credits
     if (couponActive && dbPrice >= 9900) {
       discountAmount = 3000;
       discountType = 'howland_coupon';
@@ -372,7 +387,7 @@ export default function HowlChat() {
       addBotMessage(`카카오페이 결제 링크가 열렸어! 관리자가 확인 중이니 잠시만 기다려줘 ✨\n\n결제 금액: ${finalPrice.toLocaleString()}원${discountAmount > 0 ? ` (${discountAmount.toLocaleString()}원 할인 적용)` : ''}`);
     } else {
       addSystemMessage('무통장 입금 확인 요청이 전송되었습니다');
-      addBotMessage(`입금 확인 요청을 보냈어! ✨\n\n${settings.bankName} ${settings.bankAccount} (${settings.bankHolder})\n금액: ${finalPrice.toLocaleString()}원${discountAmount > 0 ? ` (${discountAmount.toLocaleString()}원 할인)` : ''}`);
+      addBotMessage(`입금 확인 요청을 보냈어! ✨\n\n금액: ${finalPrice.toLocaleString()}원${discountAmount > 0 ? ` (${discountAmount.toLocaleString()}원 할인)` : ''}\n\n관리자가 확인하면 바로 상담을 이어갈게!`);
     }
   };
 
@@ -411,7 +426,7 @@ export default function HowlChat() {
     });
 
     addSystemMessage('💎 프리미엄 상담 신청이 접수되었습니다');
-    addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n${settings.bankName} ${settings.bankAccount} (${settings.bankHolder})\n금액: ${price.toLocaleString()}원\n\n결제 확인 후 심층 리포트를 작성해줄게!`);
+    addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n금액: ${price.toLocaleString()}원\n\n결제 확인 후 심층 리포트를 작성해줄게!`);
   };
 
   const handleAuthComplete = (profile: UserProfile) => {
@@ -441,14 +456,6 @@ export default function HowlChat() {
     }
   };
 
-  const handleLandingMenuSelect = (menuId: number) => {
-    handleStartChat(menuId);
-  };
-
-  const bgStyle = (settings.bgGradientStart !== '#FDFCFB')
-    ? { background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`, backgroundSize: '400% 400%' }
-    : undefined;
-
   // Landing page view
   if (view === 'landing') {
     return (
@@ -468,7 +475,7 @@ export default function HowlChat() {
         />
         <button
           onClick={() => navigate('/admin/settings')}
-          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-white/60 transition-colors opacity-20 hover:opacity-100"
+          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
           title="관리자 설정"
         >
           <Settings className="w-4 h-4 text-muted-foreground" />
@@ -480,7 +487,7 @@ export default function HowlChat() {
   // Auth view
   if (view === 'auth') {
     return (
-      <div className="min-h-svh aurora-bg" style={bgStyle}>
+      <div className="min-h-svh aurora-bg">
         <PhoneAuth
           onAuth={handleAuthComplete}
           onSkip={() => setView('chat')}
@@ -493,7 +500,7 @@ export default function HowlChat() {
   const currentCounselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : null;
 
   return (
-    <div className="min-h-svh aurora-bg" style={bgStyle}>
+    <div className="min-h-svh aurora-bg">
       <ChatHeader
         sessionTime={sessionTime}
         counselorName={currentCounselor?.name}
@@ -501,17 +508,21 @@ export default function HowlChat() {
         onBack={() => setView('landing')}
       />
 
-      {/* Timer widget */}
       {session.isPaid && (sessionTime !== null || timerExpired) && (
         <ConsultTimer
           seconds={sessionTime || 0}
           expired={timerExpired}
-          onExtend={() => setShowPayment(true)}
+          onExtend={() => {
+            if (settings.betaMode) {
+              setShowBetaModal(true);
+            } else {
+              setShowPayment(true);
+            }
+          }}
         />
       )}
 
       <main className="pt-20 pb-36 px-4 max-w-2xl mx-auto space-y-4">
-        {/* Scan animation */}
         {showScan && (
           <ScanAnimation image={showScan} onComplete={handleScanComplete} />
         )}
@@ -540,20 +551,48 @@ export default function HowlChat() {
         }
       />
 
+      {/* Beta mode free bypass button */}
       {session.freeReadingDone && !session.isPaid && session.selectedMenu && (
         <div className="fixed bottom-[120px] w-full px-4 z-40">
           <div className="max-w-2xl mx-auto">
+            {settings.betaMode ? (
+              <button
+                onClick={handleBetaBypass}
+                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
+              >
+                🎉 오픈 기념! 무료로 이어서 상담하기
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  if (session.selectedMenu?.id === 16) {
+                    setShowPremiumForm(true);
+                  } else {
+                    setShowPayment(true);
+                  }
+                }}
+                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
+              >
+                💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Beta modal on timer expire */}
+      {showBetaModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowBetaModal(false)} />
+          <div className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border text-center">
+            <span className="text-4xl block mb-3">🎉</span>
+            <h3 className="font-display text-lg font-bold text-foreground mb-2">오픈 기념 무료 베타!</h3>
+            <p className="text-sm text-muted-foreground mb-4">지금은 무료 베타 테스트 기간입니다</p>
             <button
-              onClick={() => {
-                if (session.selectedMenu?.id === 16) {
-                  setShowPremiumForm(true);
-                } else {
-                  setShowPayment(true);
-                }
-              }}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
+              onClick={handleBetaBypass}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98]"
             >
-              💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)
+              무료로 이어서 상담하기 ✨
             </button>
           </div>
         </div>
@@ -597,7 +636,7 @@ export default function HowlChat() {
 
       <button
         onClick={() => navigate('/admin/settings')}
-        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-white/60 transition-colors opacity-20 hover:opacity-100"
+        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
         title="관리자 설정"
       >
         <Settings className="w-4 h-4 text-muted-foreground" />
