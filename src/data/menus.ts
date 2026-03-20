@@ -27,7 +27,7 @@ export const MENUS: Menu[] = [
   { id: 13, category: 'C', categoryName: '스페셜', name: '진로/재물', icon: '💰', desc: '성공 방정식과 재물 시기', detailDesc: '성공 방정식을 찾고 언제 돈이 들어올지 구체적 시기를 리딩합니다.', price: 29000 },
   { id: 14, category: 'C', categoryName: '스페셜', name: '작명/개명', icon: '📝', desc: '운명을 리브랜딩하는 이름', detailDesc: '부족한 오행을 채워 운명을 리브랜딩하는 이름을 추천합니다.', price: 29000 },
   { id: 15, category: 'C', categoryName: '스페셜', name: '꿈해몽', icon: '🌙', desc: '무의식의 메시지 해부', detailDesc: '무의식이 보내는 경고나 예지몽을 심리학적으로 해부합니다.', price: 29000 },
-  { id: 16, category: 'D', categoryName: '프리미엄', name: '종합운명분석', icon: '💎', desc: '하울의 심층 리포트', detailDesc: '추가 질문 2개에 대해 하울이 직접 심층 분석 리포트를 작성합니다.', price: 59000 },
+  { id: 16, category: 'D', categoryName: '프리미엄', name: '종합운명분석', icon: '💎', desc: '콕타로 심층 리포트', detailDesc: '추가 질문 2개에 대해 콕타로가 직접 심층 분석 리포트를 작성합니다.', price: 59000 },
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = {
