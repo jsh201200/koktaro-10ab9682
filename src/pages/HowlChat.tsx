@@ -60,7 +60,8 @@ export default function HowlChat() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
 
-  const couponActive = searchParams.get('coupon') === 'HOWL3000';
+  const couponCode = searchParams.get('coupon');
+  const couponActive = !!couponCode; // Will validate against DB coupons
 
   // Load products from DB
   useEffect(() => {
