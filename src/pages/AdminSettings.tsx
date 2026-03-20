@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
 import { MENUS } from '@/data/menus';
+import CouponManager from '@/components/admin/CouponManager';
+import SiteConfigEditor from '@/components/admin/SiteConfigEditor';
 
-type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'messages' | 'security';
+type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'messages' | 'security' | 'coupons' | 'site';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'site', label: '사이트 설정', icon: <Globe className="w-4 h-4" /> },
+  { id: 'coupons', label: '쿠폰/이벤트', icon: <Tag className="w-4 h-4" /> },
   { id: 'branding', label: '브랜딩', icon: <Type className="w-4 h-4" /> },
   { id: 'colors', label: '배경/색상', icon: <Palette className="w-4 h-4" /> },
   { id: 'links', label: '링크 연결', icon: <Link2 className="w-4 h-4" /> },
