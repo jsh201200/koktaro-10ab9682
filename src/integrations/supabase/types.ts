@@ -106,6 +106,42 @@ export type Database = {
           },
         ]
       }
+      coupons: {
+        Row: {
+          code: string
+          created_at: string
+          discount_amount: number
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          min_price: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          min_price?: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          discount_amount?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          min_price?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       page_visits: {
         Row: {
           created_at: string | null
