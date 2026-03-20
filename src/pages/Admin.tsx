@@ -149,8 +149,8 @@ export default function AdminDashboard() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="font-serif text-2xl font-bold text-secondary-foreground">🔮 관리자 대시보드</h2>
-            <p className="text-sm text-muted-foreground mt-1">하울의 상담소 관리</p>
+            <h2 className="font-display text-2xl font-bold text-foreground">🔮 관리자 대시보드</h2>
+            <p className="text-sm text-muted-foreground mt-1">콕타로 상담소 관리</p>
           </div>
           <div className="flex gap-2">
             <button

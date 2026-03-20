@@ -151,6 +151,10 @@ export default function AdminSettings() {
           animate={{ opacity: 1, y: 0 }}
           className="flex-1 glass-strong rounded-3xl p-5 sm:p-6 glow-border"
         >
+          {activeTab === 'site' && <SiteConfigEditor />}
+
+          {activeTab === 'coupons' && <CouponManager />}
+
           {activeTab === 'branding' && (
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-bold text-secondary-foreground">🏷️ 브랜딩</h2>
