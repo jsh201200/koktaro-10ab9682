@@ -57,7 +57,6 @@ export default function AdminDashboard() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'reviews' | 'users'>('dashboard');
   
-  // Dashboard
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats>({
     todayRevenue: 0,
@@ -68,13 +67,11 @@ export default function AdminDashboard() {
     approvedReviews: 0,
   });
 
-  // Reviews
   const [reviews, setReviews] = useState<Review[]>([]);
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [editContent, setEditContent] = useState('');
   const [editRating, setEditRating] = useState(5);
 
-  // Users
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchUser, setSearchUser] = useState('');
 
@@ -89,7 +86,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 결제 데이터 로드
   const fetchPayments = async () => {
     setLoading(true);
     const { data } = await supabase
@@ -100,7 +96,6 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  // ✨ 통계 계산
   const fetchStats = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -147,7 +142,6 @@ export default function AdminDashboard() {
     });
   };
 
-  // ✨ 후기 로드
   const fetchReviews = async () => {
     const { data } = await supabase
       .from('reviews')
@@ -156,7 +150,6 @@ export default function AdminDashboard() {
     if (data) setReviews(data);
   };
 
-  // ✨ 사용자 로드
   const fetchUsers = async () => {
     const { data } = await supabase
       .from('user_profiles')
@@ -179,7 +172,6 @@ export default function AdminDashboard() {
     }
   }, [payments]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!isAuthorized) return;
     const channel = supabase
@@ -191,7 +183,6 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [isAuthorized]);
 
-  // ✨ 결제 승인
   const handleApprovePayment = async (paymentId: string) => {
     const { error } = await supabase
       .from('payments')
@@ -206,7 +197,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 결제 삭제
   const handleDeletePayment = async (paymentId: string) => {
     if (confirm('정말 삭제하시겠습니까?')) {
       const { error } = await supabase
@@ -223,7 +213,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 후기 승인
   const handleApproveReview = async (reviewId: string) => {
     const { error } = await supabase
       .from('reviews')
@@ -236,7 +225,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 후기 수정
   const handleUpdateReview = async () => {
     if (!editingReview) return;
 
@@ -254,7 +242,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 후기 삭제
   const handleDeleteReview = async (reviewId: string) => {
     if (confirm('정말 삭제하시겠습니까?')) {
       const { error } = await supabase
@@ -269,7 +256,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 사용자 삭제
   const handleDeleteUser = async (userId: string) => {
     if (confirm('정말 삭제하시겠습니까?')) {
       const { error } = await supabase
@@ -284,7 +270,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 로그인 전
   if (!isAuthorized) {
     return (
       <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
@@ -316,7 +301,6 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-svh aurora-bg p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="font-display text-3xl font-bold text-foreground">🔮 관리자 대시보드</h2>
@@ -343,7 +327,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-white/10">
           {['dashboard', 'reviews', 'users'].map(tab => (
             <button
@@ -362,10 +345,8 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div>
-            {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               <div className="glass-strong rounded-2xl p-4 text-center glow-border">
                 <p className="text-2xl font-bold text-primary">{stats.todayRevenue.toLocaleString()}원</p>
@@ -385,7 +366,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Pending Payments */}
             <div className="mb-8">
               <h3 className="text-sm font-bold text-primary tracking-wider uppercase mb-4">
                 ⏳ 입금 대기 ({pending.length})
@@ -436,7 +416,6 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Approved Payments */}
             {approved.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-muted-foreground tracking-wider uppercase mb-4">
@@ -456,7 +435,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Reviews Tab */}
         {activeTab === 'reviews' && (
           <div>
             {pendingReviews.length > 0 && (
@@ -540,7 +518,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Users Tab */}
         {activeTab === 'users' && (
           <div>
             <div className="mb-4">
@@ -574,7 +551,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Edit Review Modal */}
         <AnimatePresence>
           {editingReview && (
             <motion.div
@@ -629,10 +605,9 @@ export default function AdminDashboard() {
           )}
         </AnimatePresence>
 
-        {/* Settings Button */}
         <button
           onClick={() => navigate('/admin/settings')}
-          className="fixed bottom-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+          className="fixed bottom-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
           title="상세 설정"
         >
           <Settings className="w-4 h-4 text-muted-foreground" />
