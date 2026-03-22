@@ -11,6 +11,7 @@ import LandingPage from '@/components/LandingPage';
 import PhoneAuth from '@/components/PhoneAuth';
 import ConsultTimer from '@/components/ConsultTimer';
 import ReviewModal from '@/components/ReviewModal';
+import PremiumReport from '@/components/PremiumReport';
 import ScanAnimation from '@/components/ScanAnimation';
 import { useChat } from '@/hooks/useChat';
 import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
@@ -56,6 +57,7 @@ export default function HowlChat() {
   const [showPayment, setShowPayment] = useState(false);
   const [showPremiumForm, setShowPremiumForm] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const [showPremiumReport, setShowPremiumReport] = useState(false);
   const [showScan, setShowScan] = useState<string | null>(null);
   const [sessionTime, setSessionTime] = useState<number | null>(null);
   const [timerExpired, setTimerExpired] = useState(false);
@@ -403,8 +405,6 @@ export default function HowlChat() {
       setIsMenuOpen(true);
     }, 2000);
   }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
-
-  // ✨ 1,000원 상품은 activatePaidMode()에서 처리하므로 제거
 
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
@@ -856,7 +856,20 @@ export default function HowlChat() {
           userName={userProfile.nickname}
           menuName={session.selectedMenu.name}
           paymentPrice={getDbPrice(session.selectedMenu.id)}
-          onClose={() => setShowReview(false)}
+          onClose={() => {
+            setShowReview(false);
+            setShowPremiumReport(true);
+          }}
+        />
+      )}
+
+      {showPremiumReport && (
+        <PremiumReport
+          counselorName={currentCounselor?.name || ''}
+          menuName={session.selectedMenu?.name || ''}
+          userName={userProfile?.nickname || ''}
+          chatMessages={messages}
+          onClose={() => setShowPremiumReport(false)}
         />
       )}
 
