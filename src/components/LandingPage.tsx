@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { COUNSELORS } from '@/data/counselors';
+import { MENUS } from '@/data/menus';
 import { Star, Gift, Sparkles, ChevronRight, X, Play } from 'lucide-react';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
 
@@ -89,6 +90,16 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     }
   }, [config.popup_notice]);
 
+  // ✨ 상담 시작 (도사별)
+  const handleStartConsult = (counselorId: string) => {
+    // 해당 도사의 첫 번째 메뉴로 시작
+    const counselor = COUNSELORS.find(c => c.id === counselorId);
+    if (counselor && counselor.menuIds.length > 0) {
+      const menuId = counselor.menuIds[0];
+      onStartChat(menuId);
+    }
+  };
+
   // ✨ 상담 이어하기
   const handleContinueConsult = (counselorId: string) => {
     const consult = ongoingConsults.get(counselorId);
@@ -170,8 +181,9 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                 )}
 
                 <div className="flex gap-2">
+                  {/* 도사 프로필 + 정보 */}
                   <button
-                    onClick={() => onStartChat()}
+                    onClick={() => handleStartConsult(c.id)}
                     className="flex-1 flex items-center gap-3 p-3 rounded-xl glass-strong glow-border hover:bg-muted/40 transition-all active:scale-[0.98] group"
                   >
                     {/* Profile Image */}
@@ -189,13 +201,24 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
 
+                  {/* ✨ 상담 시작 버튼 */}
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    onClick={() => handleStartConsult(c.id)}
+                    className="px-3 py-3 rounded-xl bg-primary text-primary-foreground hover:shadow-lg transition-all active:scale-[0.95] font-semibold text-xs whitespace-nowrap flex-shrink-0"
+                    title={`${c.name}와 상담 시작`}
+                  >
+                    상담 시작
+                  </motion.button>
+
                   {/* ✨ 상담 이어하기 버튼 */}
                   {ongoingConsults.has(c.id) && (
                     <motion.button
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       onClick={() => handleContinueConsult(c.id)}
-                      className="px-3 py-3 rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-all active:scale-[0.95] flex items-center gap-1.5 font-semibold text-xs"
+                      className="px-3 py-3 rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-all active:scale-[0.95] flex items-center gap-1.5 font-semibold text-xs whitespace-nowrap flex-shrink-0"
                       title="상담 이어하기"
                     >
                       <Play className="w-3 h-3 fill-primary" />
@@ -206,13 +229,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
               </motion.div>
             ))}
           </div>
-
-          <button
-            onClick={() => onStartChat()}
-            className="px-8 py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98]"
-          >
-            ✨ 상담 시작하기
-          </button>
         </div>
       </section>
 
