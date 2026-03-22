@@ -1,14 +1,15 @@
 import howlProfile from '@/assets/howl-profile.png';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 
 interface ChatHeaderProps {
   sessionTime: number | null;
   counselorName?: string;
   counselorImage?: string;
   onBack?: () => void;
+  onExit?: () => void;
 }
 
-export default function ChatHeader({ sessionTime, counselorName, counselorImage, onBack }: ChatHeaderProps) {
+export default function ChatHeader({ sessionTime, counselorName, counselorImage, onBack, onExit }: ChatHeaderProps) {
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -36,11 +37,25 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
             </p>
           </div>
         </div>
-        {sessionTime !== null && sessionTime > 0 && (
-          <div className="text-xs font-mono glass-strong px-3 py-1.5 rounded-full text-primary font-semibold">
-            ⏳ {formatTime(sessionTime)}
-          </div>
-        )}
+
+        <div className="flex items-center gap-3">
+          {sessionTime !== null && sessionTime > 0 && (
+            <div className="text-xs font-mono glass-strong px-3 py-1.5 rounded-full text-primary font-semibold">
+              ⏳ {formatTime(sessionTime)}
+            </div>
+          )}
+          
+          {/* ✨ 나가기 버튼 */}
+          {counselorName && onExit && (
+            <button 
+              onClick={onExit} 
+              className="p-1.5 rounded-lg hover:bg-destructive/20 transition-colors"
+              title="상담 종료"
+            >
+              <X className="w-5 h-5 text-destructive" />
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );
