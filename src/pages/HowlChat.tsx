@@ -237,6 +237,44 @@ export default function HowlChat() {
     }, 2000);
   }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
 
+  // ✨ 1,000원 상품(한 뼘 운세) 스낵 포맷 처리
+  const handleSnackConsultation = useCallback(async (menu: Menu) => {
+    const counselor = getCounselorForMenu(menu.id);
+    
+    addSystemMessage(`${menu.icon} ${counselor.name}의 ${menu.name} 상담을 시작합니다`);
+    
+    setIsTyping(true);
+    await delayedTyping();
+    setIsTyping(false);
+    
+    const name = session.userName || userProfile?.nickname || '';
+    addBotMessage(
+      `${name}${name ? '님, ' : ''}오늘의 기운을 읽어볼게요! 🔮\n\n` +
+      `[당신의 오늘 운명]`
+    );
+
+    // 1초 후 결과 출력
+    setTimeout(async () => {
+      setIsTyping(true);
+      await delayedTyping();
+      setIsTyping(false);
+      
+      addBotMessage(
+        `✨ 럭키 컬러: 파란색\n` +
+        `🍽️ 추천 음식: 흰쌀밥\n` +
+        `🪬 오늘의 부적: 대나무`
+      );
+      
+      // 2초 후 종료
+      setTimeout(() => {
+        addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+        updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+        setSessionTime(null);
+        setShowReview(true);
+      }, 2000);
+    }, 1000);
+  }, [session.userName, userProfile?.nickname, addBotMessage, addSystemMessage, delayedTyping, updateSession, setSessionTime, setIsTyping, setShowReview]);
+
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
@@ -320,6 +358,12 @@ export default function HowlChat() {
 
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
+
+    // ✨ 1,000원 상품은 스낵 포맷으로 처리
+    if (menu.id === 1) {
+      handleSnackConsultation(menu);
+      return;
+    }
 
     const counselor = getCounselorForMenu(menu.id);
     const roomId = `room_${counselor.id}_${Date.now()}`;
