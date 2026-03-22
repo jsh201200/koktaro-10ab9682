@@ -98,7 +98,7 @@ export default function AdminSettings() {
       <header className="sticky top-0 z-50 glass px-4 py-3 sm:px-6">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="p-2 rounded-xl hover:bg-white/50 transition-colors">
+            <button onClick={() => navigate('/admin')} className="p-2 rounded-xl hover:bg-white/50 transition-colors">
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
             <div>
