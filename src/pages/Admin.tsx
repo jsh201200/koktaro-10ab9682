@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { RefreshCw, Trash2, Edit2, Star, X, Settings } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Star, X, Settings, Ticket } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -51,11 +51,17 @@ interface UserProfile {
   created_at: string;
 }
 
+interface CouponData {
+  couponCode: string;
+  couponDiscount: number;
+  couponActive: boolean;
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reviews' | 'users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reviews' | 'users' | 'coupons'>('dashboard');
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -74,6 +80,16 @@ export default function AdminDashboard() {
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchUser, setSearchUser] = useState('');
+
+  // 쿠폰 상태
+  const [coupon, setCoupon] = useState<CouponData>({
+    couponCode: '',
+    couponDiscount: 0,
+    couponActive: false,
+  });
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState('');
 
   const [loading, setLoading] = useState(false);
 
@@ -158,11 +174,89 @@ export default function AdminDashboard() {
     if (data) setUsers(data);
   };
 
+  // 쿠폰 데이터 fetch
+  const fetchCoupon = async () => {
+    setCouponLoading(true);
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'coupon')
+      .single();
+
+    if (data && data.value) {
+      setCoupon(data.value as CouponData);
+      setCouponCode(data.value.couponCode || '');
+      setCouponDiscount(String(data.value.couponDiscount || ''));
+    }
+    setCouponLoading(false);
+  };
+
+  // 쿠폰 저장
+  const handleSaveCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast.error('쿠폰 코드를 입력하세요');
+      return;
+    }
+
+    if (!couponDiscount || isNaN(Number(couponDiscount))) {
+      toast.error('유효한 할인 금액을 입력하세요');
+      return;
+    }
+
+    setCouponLoading(true);
+
+    const newCouponData: CouponData = {
+      couponCode: couponCode.trim(),
+      couponDiscount: Number(couponDiscount),
+      couponActive: coupon.couponActive,
+    };
+
+    const { error } = await supabase
+      .from('site_settings')
+      .update({ value: newCouponData })
+      .eq('key', 'coupon');
+
+    if (error) {
+      toast.error('쿠폰 저장 실패');
+      console.error(error);
+    } else {
+      toast.success('쿠폰이 저장되었습니다!');
+      setCoupon(newCouponData);
+    }
+
+    setCouponLoading(false);
+  };
+
+  // 쿠폰 활성화/비활성화
+  const handleToggleCoupon = async () => {
+    setCouponLoading(true);
+
+    const newCouponData: CouponData = {
+      ...coupon,
+      couponActive: !coupon.couponActive,
+    };
+
+    const { error } = await supabase
+      .from('site_settings')
+      .update({ value: newCouponData })
+      .eq('key', 'coupon');
+
+    if (error) {
+      toast.error('쿠폰 상태 변경 실패');
+    } else {
+      toast.success(newCouponData.couponActive ? '쿠폰이 활성화되었습니다' : '쿠폰이 비활성화되었습니다');
+      setCoupon(newCouponData);
+    }
+
+    setCouponLoading(false);
+  };
+
   useEffect(() => {
     if (isAuthorized) {
       fetchPayments();
       fetchReviews();
       fetchUsers();
+      fetchCoupon();
     }
   }, [isAuthorized]);
 
@@ -179,6 +273,7 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => fetchPayments())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => fetchReviews())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => fetchUsers())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, () => fetchCoupon())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [isAuthorized]);
@@ -312,6 +407,7 @@ export default function AdminDashboard() {
                 fetchPayments();
                 fetchReviews();
                 fetchUsers();
+                fetchCoupon();
               }}
               disabled={loading}
               className="glass rounded-2xl px-4 py-2 text-sm font-medium text-primary hover:bg-white/60 transition-colors flex items-center gap-1"
@@ -327,12 +423,12 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6 border-b border-white/10">
-          {['dashboard', 'reviews', 'users'].map(tab => (
+        <div className="flex gap-2 mb-6 border-b border-white/10 overflow-x-auto">
+          {['dashboard', 'reviews', 'users', 'coupons'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
+              className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab
                   ? 'text-primary border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -341,6 +437,7 @@ export default function AdminDashboard() {
               {tab === 'dashboard' && '📊 대시보드'}
               {tab === 'reviews' && '⭐ 후기'}
               {tab === 'users' && '👥 사용자'}
+              {tab === 'coupons' && '🎟️ 쿠폰'}
             </button>
           ))}
         </div>
@@ -548,6 +645,98 @@ export default function AdminDashboard() {
                   </div>
                 ))}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'coupons' && (
+          <div className="max-w-2xl">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-strong rounded-2xl p-6 glow-border"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <Ticket className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-bold text-foreground">쿠폰 관리</h3>
+              </div>
+
+              <div className="space-y-4">
+                {/* 현재 쿠폰 상태 */}
+                <div className="glass rounded-2xl p-4 mb-6">
+                  <p className="text-xs text-muted-foreground mb-2">현재 쿠폰</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">
+                        {coupon.couponCode || '설정된 쿠폰 없음'}
+                      </p>
+                      {coupon.couponCode && (
+                        <p className="text-xs text-primary mt-1">
+                          할인: {coupon.couponDiscount.toLocaleString()}원
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleToggleCoupon}
+                      disabled={couponLoading || !coupon.couponCode}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        coupon.couponActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                      } disabled:opacity-50`}
+                    >
+                      {coupon.couponActive ? '활성 🔓' : '비활성 🔒'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 쿠폰 코드 입력 */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-2">
+                    쿠폰 코드
+                  </label>
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="예: LUCKY2025"
+                    className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">사용자가 입력할 쿠폰 코드</p>
+                </div>
+
+                {/* 할인 금액 입력 */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-2">
+                    할인 금액 (원)
+                  </label>
+                  <input
+                    type="number"
+                    value={couponDiscount}
+                    onChange={(e) => setCouponDiscount(e.target.value)}
+                    placeholder="5000"
+                    className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    min="0"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">사용자 결제 시 할인될 금액</p>
+                </div>
+
+                {/* 저장 버튼 */}
+                <button
+                  onClick={handleSaveCoupon}
+                  disabled={couponLoading}
+                  className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-bold hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {couponLoading ? '저장 중...' : '쿠폰 저장'}
+                </button>
+
+                {/* 안내 */}
+                <div className="glass rounded-2xl p-3 mt-6">
+                  <p className="text-xs text-muted-foreground">
+                    💡 <strong>사용 방법:</strong> 쿠폰을 저장하고 활성화하면, 사용자가 결제할 때 자동으로 적용됩니다.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
           </div>
         )}
 
