@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Menu } from '@/data/menus';
 import { X } from 'lucide-react';
 import { loadSettings } from '@/stores/siteSettings';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PaymentModalProps {
   menu: Menu;
@@ -13,22 +14,69 @@ interface PaymentModalProps {
   userCredits?: number;
 }
 
+interface MenuWithPrice extends Menu {
+  price: number;
+}
+
 export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit, couponActive, userCredits = 0 }: PaymentModalProps) {
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
   const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits'>('none');
+  const [menuWithPrice, setMenuWithPrice] = useState<MenuWithPrice>(menu as MenuWithPrice);
   const s = loadSettings();
 
-  const canUseCoupon = couponActive && menu.price >= 9900;
-  const canUseCredits = userCredits > 0 && menu.price >= 9900;
+  // ✨ DB에서 실시간 가격 fetch
+  useEffect(() => {
+    const loadMenuPrice = async () => {
+      const { data: product } = await supabase
+        .from('products')
+        .select('*')
+        .eq('menu_id', menu.id)
+        .single();
 
-  let finalPrice = menu.price;
+      if (product) {
+        setMenuWithPrice({
+          ...menu,
+          price: product.price,
+          name: product.name || menu.name,
+        } as MenuWithPrice);
+      }
+    };
+
+    loadMenuPrice();
+
+    // ✨ 실시간 구독 (가격 변경 시 자동 업데이트)
+    const channel = supabase
+      .channel(`product-${menu.id}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'products',
+          filter: `menu_id=eq.${menu.id}`
+        },
+        () => {
+          loadMenuPrice(); // 가격 변경되면 다시 로드
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [menu.id, menu]);
+
+  const canUseCoupon = couponActive && menuWithPrice.price >= 9900;
+  const canUseCredits = userCredits > 0 && menuWithPrice.price >= 9900;
+
+  let finalPrice = menuWithPrice.price;
   if (discountType === 'coupon' && canUseCoupon) {
-    finalPrice = menu.price - 3000;
+    finalPrice = menuWithPrice.price - 3000;
   } else if (discountType === 'credits' && canUseCredits) {
-    const creditDiscount = Math.min(userCredits, menu.price);
-    finalPrice = menu.price - creditDiscount;
+    const creditDiscount = Math.min(userCredits, menuWithPrice.price);
+    finalPrice = menuWithPrice.price - creditDiscount;
   }
 
   const handleKakaoPay = () => {
@@ -59,12 +107,12 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
           </button>
 
           <div className="text-center mb-5">
-            <span className="text-3xl mb-2 block">{menu.icon}</span>
-            <h3 className="font-display text-lg font-bold text-foreground">{menu.name}</h3>
+            <span className="text-3xl mb-2 block">{menuWithPrice.icon}</span>
+            <h3 className="font-display text-lg font-bold text-foreground">{menuWithPrice.name}</h3>
             <p className="text-2xl font-bold text-primary mt-1">
               {finalPrice.toLocaleString()}원
-              {finalPrice !== menu.price && (
-                <span className="text-sm text-muted-foreground line-through ml-2">{menu.price.toLocaleString()}원</span>
+              {finalPrice !== menuWithPrice.price && (
+                <span className="text-sm text-muted-foreground line-through ml-2">{menuWithPrice.price.toLocaleString()}원</span>
               )}
             </p>
           </div>
