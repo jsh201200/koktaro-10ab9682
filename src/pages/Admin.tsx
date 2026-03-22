@@ -648,3 +648,21 @@ export default function AdminDashboard() {
     </div>
   );
 }
+<button
+  onClick={() => navigate('/admin/settings')}
+  className="fixed bottom-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+  title="상세 설정"
+>
+  <Settings className="w-4 h-4 text-muted-foreground" />
+</button>
+```
+
+---
+
+## **정리:**
+```
+메인 화면 [⚙️] → /admin (대시보드)
+  ↓
+대시보드에서 [⚙️] → /admin/settings (상세 설정)
+  ↓
+설정에서 [←] → / (홈)
