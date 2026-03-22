@@ -90,23 +90,54 @@ export default function HowlChat() {
     }
   }, []);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  // ✨ 아이스브레이킹: 시간별 센스있는 멘트
+const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
+  const hour = new Date().getHours();
+  
+  let timeGreeting = '';
+  if (hour >= 5 && hour < 9) {
+    timeGreeting = '새벽부터 고민이 깊으신가 봐요';
+  } else if (hour >= 9 && hour < 12) {
+    timeGreeting = '오전이 반짝반짝한 시간이네요';
+  } else if (hour >= 12 && hour < 18) {
+    timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
+  } else if (hour >= 18 && hour < 22) {
+    timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
+  } else {
+    timeGreeting = '밤은 진실이 드러나는 시간이에요';
+  }
 
-  useEffect(() => {
-    if (view === 'chat' && !greetingSent.current && messages.length === 0) {
-      greetingSent.current = true;
-      const name = userProfile?.nickname || session.userName;
-      setTimeout(() => {
-        if (name) {
-          addBotMessage(`${name}님, 다시 만나서 반가워! ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기'를 눌러봐! 🔮`);
-        } else {
-          addBotMessage(settings.welcomeMessage);
-        }
-      }, 500);
-    }
-  }, [view, messages.length]);
+  // 도사별 톤 적용
+  const counselorTones: { [key: string]: string } = {
+    'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
+    'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
+    'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨`,
+    'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙`,
+    'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂`,
+    'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자! 🔥`,
+  };
+
+  return counselorTones[counselorId] || timeGreeting;
+}, []);
+
+useEffect(() => {
+  if (view === 'chat' && !greetingSent.current && messages.length === 0) {
+    greetingSent.current = true;
+    const name = userProfile?.nickname || session.userName;
+    setTimeout(() => {
+      if (name && session.selectedMenu) {
+        const counselor = getCounselorForMenu(session.selectedMenu.id);
+        const icebreakerMsg = getIcebreakerMessage(counselor.id, name);
+        
+        addBotMessage(`${name}님 ✨\n\n${icebreakerMsg}\n\n오늘은 어떤 운명을 들어보고 싶으신가요?`);
+      } else if (name) {
+        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+      } else {
+        addBotMessage(settings.welcomeMessage);
+      }
+    }, 500);
+  }
+}, [view, messages.length, session.selectedMenu, getIcebreakerMessage]);
 
   useEffect(() => {
     if (session.sessionExpiry && session.isPaid) {
