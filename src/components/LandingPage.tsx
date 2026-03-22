@@ -40,6 +40,28 @@ interface LandingPageProps {
   onCheckCredits: () => void;
 }
 
+// 🌟 테스트 후기 3개 미리 삽입
+const SAMPLE_REVIEWS = [
+  {
+    masked_name: '명화 선생님',
+    content: '명화 선생님 팩폭에 정신 번쩍 들었어요. 이건 뭐 신(神)인가 싶을 정도로 정확했어요! 강력 추천합니다 🔥',
+    rating: 5,
+    menu_name: '손금 관상',
+  },
+  {
+    masked_name: '루나 선생님',
+    content: '루나 선생님 타로는 정말 귀신인줄 알았어요. 지금까지 받은 상담 중 가장 정확했고 앞으로 어떻게 해야 할지까지 알려주셨어요!',
+    rating: 5,
+    menu_name: '타로 카드',
+  },
+  {
+    masked_name: '이안 선생님',
+    content: '투자 조언은 이안 선생님이 최고라고 생각해요. 숫자와 데이터로 정확하게 설명해주셔서 신뢰가 가요 💼',
+    rating: 5,
+    menu_name: '재물운 분석',
+  },
+];
+
 export default function LandingPage({ onStartChat, couponActive, userCredits, userName, onCheckCredits }: LandingPageProps) {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -48,16 +70,30 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const { config } = useSiteConfig();
   const [showPopup, setShowPopup] = useState(false);
 
-  // ✨ 리뷰 로드
+  // ✨ 후기 로드 (없으면 샘플 후기 사용)
   useEffect(() => {
     const fetchData = async () => {
-      const { data: revs } = await supabase
+      const { data: revs, count } = await supabase
         .from('reviews')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('is_approved', true)
         .order('created_at', { ascending: false })
         .limit(10);
-      if (revs) setReviews(revs as any);
+
+      if (revs && revs.length > 0) {
+        setReviews(revs as any);
+      } else {
+        // 🌟 후기가 없으면 샘플 후기 표시
+        const sampleReviews: Review[] = SAMPLE_REVIEWS.map((r, i) => ({
+          id: `sample-${i}`,
+          masked_name: r.masked_name,
+          content: r.content,
+          rating: r.rating,
+          menu_name: r.menu_name,
+          created_at: new Date().toISOString(),
+        }));
+        setReviews(sampleReviews);
+      }
     };
     fetchData();
   }, []);
@@ -205,7 +241,7 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase mb-2">KOK TAROT</p>
+            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase mb-2">콕 타로</p>
             <h1 className="font-display text-4xl sm:text-5xl font-bold text-foreground mb-3 neon-glow">
               {config.hero_title}
             </h1>
@@ -295,49 +331,68 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
 
       <section className="px-4 pb-6">
         <div className="max-w-2xl mx-auto">
-          <button
-            onClick={() => navigate('/reviews')}
-            className="w-full flex items-center justify-between mb-3 px-1 group"
-          >
+          <div className="flex items-center justify-between mb-3 px-1">
             <h2 className="font-display text-lg font-bold text-foreground flex items-center gap-2">
-              <Star className="w-4 h-4 text-primary" /> 베스트 후기
+              <Star className="w-5 h-5 text-primary fill-primary" /> 베스트 후기
             </h2>
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-          </button>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-lg"
+            >
+              ✨
+            </motion.div>
+          </div>
+
           {reviews.length > 0 ? (
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-              {reviews.map(r => (
-                <div
+              {reviews.slice(0, 3).map((r, i) => (
+                <motion.div
                   key={r.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
                   onClick={() => navigate('/reviews')}
-                  className="glass-strong rounded-2xl p-4 min-w-[240px] max-w-[280px] flex-shrink-0 glow-border cursor-pointer hover:shadow-lg transition-all"
+                  className="glass-strong rounded-2xl p-4 min-w-[240px] max-w-[280px] flex-shrink-0 glow-border cursor-pointer hover:shadow-lg transition-all hover:scale-105"
                 >
                   <div className="flex items-center gap-1 mb-2">
                     {Array.from({ length: r.rating }).map((_, i) => (
-                      <Star key={i} className="w-3 h-3 fill-primary text-primary" />
+                      <motion.div
+                        key={i}
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: i * 0.1 }}
+                      >
+                        <Star className="w-4 h-4 fill-primary text-primary" />
+                      </motion.div>
                     ))}
                   </div>
-                  <p className="text-xs text-foreground line-clamp-3 mb-2">{r.content}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] text-muted-foreground">{r.masked_name}</span>
-                    {r.menu_name && <span className="text-[10px] text-primary font-medium">{r.menu_name}</span>}
+                  <p className="text-sm text-foreground line-clamp-3 mb-2 font-medium">{r.content}</p>
+                  <div className="flex justify-between items-center pt-2 border-t border-primary/10">
+                    <span className="text-[11px] text-muted-foreground font-semibold">{r.masked_name}</span>
+                    {r.menu_name && <span className="text-[10px] text-primary font-bold bg-primary/10 px-2 py-1 rounded">{r.menu_name}</span>}
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           ) : (
             <div className="glass-strong rounded-2xl p-6 text-center glow-border">
-              <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">첫 후기를 남기고 적립금을 받아보세요! ✨</p>
+              <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-4xl mb-2">
+                ✨
+              </motion.div>
+              <p className="text-sm text-muted-foreground">첫 후기를 남기고 적립금을 받아보세요!</p>
             </div>
           )}
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/reviews')}
-            className="w-full mt-3 py-2.5 rounded-2xl glass text-xs font-semibold text-primary hover:bg-muted/40 transition-colors"
+            className="w-full mt-3 py-3 rounded-2xl bg-gradient-to-r from-primary/20 to-pink-500/20 text-primary font-bold text-sm hover:shadow-lg transition-all border border-primary/30 flex items-center justify-center gap-2"
           >
-            ✏️ 후기 작성하고 1,000원 받기
-          </button>
+            <span>✏️</span>
+            <span>후기 작성하고 1,000원 받기</span>
+          </motion.button>
         </div>
       </section>
 
