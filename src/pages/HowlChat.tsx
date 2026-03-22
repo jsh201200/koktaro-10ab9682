@@ -19,7 +19,7 @@ import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
 import { useSiteSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
-import { Settings, X } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -55,7 +55,6 @@ export default function HowlChat() {
   const [timerExpired, setTimerExpired] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
-  const [showBetaModal, setShowBetaModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -161,7 +160,6 @@ export default function HowlChat() {
       paymentPending: false,
     });
     setTimerExpired(false);
-    setShowBetaModal(false);
     addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
     toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
 
@@ -242,42 +240,7 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    // ✨ 결제 고객 기억력: 결제 상태 확인
-if (session.isPaid) {
-  // 결제 완료자 - 이름 묻지 않고 바로 상담 진행
-  const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
-  await handleBotResponse(
-    text,
-    session.selectedMenu?.name,
-    session.isPaid,
-    undefined,
-    counselor?.id,
-    session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
-  );
-  return;
-}
-
-// 미결제자 - 이름 묻기
-if (!session.userName && !userProfile?.nickname) {
-  const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
-  if (name) {
-    updateSession({ userName: name });
-    setIsTyping(true);
-    await delayedTyping();
-    setIsTyping(false);
-    addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
-    return;
-  }
-  addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
-  return;
-}
-    }
-
-    if (timerExpired) {
-      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
-      return;
-    }
-
+    // ✨ 결제 고객 기억력: 결제 완료자면 이름 묻지 않고 바로 진행
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
@@ -292,7 +255,43 @@ if (!session.userName && !userProfile?.nickname) {
         setShowReview(true);
         return;
       }
+
+      if (image && [2, 12].includes(session.selectedMenu.id)) {
+        setShowScan(image);
+        return;
+      }
+
       updateSession({ questionCount: session.questionCount + 1 });
+      const counselor = getCounselorForMenu(session.selectedMenu.id);
+      await handleBotResponse(
+        text,
+        session.selectedMenu.name,
+        true,
+        image,
+        counselor.id,
+        getDbPrice(session.selectedMenu.id)
+      );
+      return;
+    }
+
+    // ✨ 미결제 상태 체크
+    if (!session.userName && !userProfile?.nickname) {
+      const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
+      if (name) {
+        updateSession({ userName: name });
+        setIsTyping(true);
+        await delayedTyping();
+        setIsTyping(false);
+        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+        return;
+      }
+      addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
+      return;
+    }
+
+    if (timerExpired) {
+      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
+      return;
     }
 
     if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
@@ -368,14 +367,6 @@ if (!session.userName && !userProfile?.nickname) {
       counselor?.id,
       session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
     );
-  };
-
-  const handleBetaBypass = () => {
-    if (!session.selectedMenu) return;
-    const product = dbProducts.find(p => p.menu_id === session.selectedMenu!.id);
-    const durationMin = product?.duration_minutes || 30;
-    activatePaidMode(durationMin, session.selectedMenu.id, session.selectedMenu.name, 0);
-    toast.success("🎉 무료 베타 테스트 모드로 상담을 이어갑니다!");
   };
 
   const handleExitChat = async (deleteChat: boolean) => {
