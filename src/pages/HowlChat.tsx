@@ -64,7 +64,6 @@ export default function HowlChat() {
   const couponCode = searchParams.get('coupon');
   const couponActive = !!couponCode;
 
-  // Load products from DB
   useEffect(() => {
     const loadProducts = async () => {
       const { data } = await supabase.from('products').select('*').eq('enabled', true).order('sort_order');
@@ -213,6 +212,33 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
+  // ✨ 크로스셀링 함수
+  const handleCrossSelling = useCallback(() => {
+    const currentCounselor = session.selectedMenu 
+      ? getCounselorForMenu(session.selectedMenu.id) 
+      : null;
+
+    const recommendations: { [key: string]: { name: string; specialty: string } } = {
+      'ian': { name: '지한', specialty: '연애운' },
+      'jihan': { name: '송선생', specialty: '길방' },
+      'songsengsang': { name: '루나', specialty: '타로' },
+      'luna': { name: '수현', specialty: '심리상담' },
+      'suhyun': { name: '명화', specialty: '실질 해결책' },
+      'myunghwa': { name: '이안', specialty: '투자/재물운' },
+    };
+
+    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
+
+    addBotMessage(
+      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
+      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
+    );
+
+    setTimeout(() => {
+      setIsMenuOpen(true);
+    }, 2000);
+  }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
+
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
@@ -231,17 +257,19 @@ export default function HowlChat() {
     }
 
     if (timerExpired) {
-      if (settings.betaMode) {
-        setShowBetaModal(true);
-      } else {
-        addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
-      }
+      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
       return;
     }
 
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
+        
+        // ✨ 크로스셀링 로직
+        setTimeout(() => {
+          handleCrossSelling();
+        }, 1500);
+        
         updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
         setSessionTime(null);
         setShowReview(true);
@@ -277,7 +305,6 @@ export default function HowlChat() {
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
-    // ✨ room_id 생성 (도사ID + 타임스탬프)
     const counselor = getCounselorForMenu(menu.id);
     const roomId = `room_${counselor.id}_${Date.now()}`;
 
@@ -290,7 +317,7 @@ export default function HowlChat() {
       questionCount: 0,
       imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
-      roomId, // ✨ room_id 저장
+      roomId,
     });
 
     if (menu.id === 16) {
@@ -338,7 +365,6 @@ export default function HowlChat() {
     setShowExitModal(false);
     
     if (deleteChat) {
-      // ✨ 대화 내용 삭제
       await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
       addSystemMessage("대화 내용이 삭제되었습니다.");
     }
@@ -484,7 +510,7 @@ export default function HowlChat() {
         />
         <button
           onClick={() => navigate('/admin')}
-          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
           title="관리자 대시보드"
         >
           <Settings className="w-4 h-4 text-muted-foreground" />
@@ -516,7 +542,6 @@ export default function HowlChat() {
         onExit={() => setShowExitModal(true)}
       />
 
-      {/* Exit Chat Modal */}
       {showExitModal && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowExitModal(false)} />
@@ -545,13 +570,7 @@ export default function HowlChat() {
         <ConsultTimer
           seconds={sessionTime || 0}
           expired={timerExpired}
-          onExtend={() => {
-            if (settings.betaMode) {
-              setShowBetaModal(true);
-            } else {
-              setShowPayment(true);
-            }
-          }}
+          onExtend={() => setShowPayment(true)}
         />
       )}
 
@@ -587,43 +606,17 @@ export default function HowlChat() {
       {session.freeReadingDone && !session.isPaid && session.selectedMenu && (
         <div className="fixed bottom-[120px] w-full px-4 z-40">
           <div className="max-w-2xl mx-auto">
-            {settings.betaMode ? (
-              <button
-                onClick={handleBetaBypass}
-                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
-              >
-                🎉 오픈 기념! 무료로 이어서 상담하기
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  if (session.selectedMenu?.id === 16) {
-                    setShowPremiumForm(true);
-                  } else {
-                    setShowPayment(true);
-                  }
-                }}
-                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
-              >
-                💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showBetaModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowBetaModal(false)} />
-          <div className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border text-center">
-            <span className="text-4xl block mb-3">🎉</span>
-            <h3 className="font-display text-lg font-bold text-foreground mb-2">오픈 기념 무료 베타!</h3>
-            <p className="text-sm text-muted-foreground mb-4">지금은 무료 베타 테스트 기간입니다</p>
             <button
-              onClick={handleBetaBypass}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98]"
+              onClick={() => {
+                if (session.selectedMenu?.id === 16) {
+                  setShowPremiumForm(true);
+                } else {
+                  setShowPayment(true);
+                }
+              }}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
             >
-              무료로 이어서 상담하기 ✨
+              💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)
             </button>
           </div>
         </div>
@@ -667,7 +660,7 @@ export default function HowlChat() {
 
       <button
         onClick={() => navigate('/admin')}
-        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
         title="관리자 대시보드"
       >
         <Settings className="w-4 h-4 text-muted-foreground" />
