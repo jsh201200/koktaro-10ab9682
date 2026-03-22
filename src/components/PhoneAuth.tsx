@@ -15,6 +15,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
   const [nickname, setNickname] = useState('');
   const [existingProfile, setExistingProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [pinFailCount, setPinFailCount] = useState(0); // 🔐 PIN 실패 횟수 추적
 
   // ✨ 휴대폰 자동 포맷팅: 010-XXXX-XXXX
   const formatPhone = (val: string) => {
@@ -51,6 +52,8 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       if (data) {
         // 이미 가입된 번호
         setExistingProfile(data);
+        setPinFailCount(0); // 🔐 PIN 실패 횟수 초기화
+        setPin(''); // PIN 입력창 초기화
         setStep('verify_pin');
       } else {
         // 새 가입
@@ -64,10 +67,30 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     }
   };
 
+  // 🔐 세션 완전 초기화 (진입 차단)
+  const resetSessionCompletely = () => {
+    localStorage.removeItem('howl_session_id');
+    localStorage.removeItem('howl_profile_id');
+    localStorage.removeItem('howl_last_auth_id');
+    localStorage.removeItem('howl_last_auth_time');
+    
+    const newSessionId = `session_${Date.now()}_${Math.random()}`;
+    localStorage.setItem('howl_session_id', newSessionId);
+    
+    toast.error('⚠️ 인증 실패. 새로 시작해주세요.');
+    setStep('phone');
+    setPhone('');
+    setPin('');
+    setExistingProfile(null);
+    setPinFailCount(0);
+  };
+
   const handleVerifyPin = async () => {
     if (!existingProfile) return;
     
+    // 🔐 전화번호+PIN 100% 일치 검증
     if (pin === existingProfile.pin) {
+      // ✅ 인증 성공
       const cachedSessionId = localStorage.getItem('howl_session_id');
       if (cachedSessionId) {
         const { data: sessionData } = await supabase
@@ -81,7 +104,11 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         }
       }
       
+      // 🔐 인증 정보 저장
       localStorage.setItem('howl_profile_id', existingProfile.id);
+      localStorage.setItem('howl_last_auth_id', existingProfile.id);
+      localStorage.setItem('howl_last_auth_time', Date.now().toString());
+      
       onAuth({
         id: existingProfile.id,
         phone: existingProfile.phone,
@@ -92,9 +119,22 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         gender: existingProfile.gender,
       });
       toast.success(`${existingProfile.nickname || ''}님, 다시 만나서 반가워요! ✨`);
+      setPinFailCount(0); // 성공 시 실패 횟수 초기화
     } else {
-      toast.error('비밀번호가 일치하지 않아요');
+      // ❌ 인증 실패
+      const newFailCount = pinFailCount + 1;
+      setPinFailCount(newFailCount);
       setPin('');
+
+      if (newFailCount >= 3) {
+        // 🔐 3회 이상 실패 → 진입 차단 & 새 세션
+        toast.error(`⚠️ 비밀번호 ${newFailCount}회 오류. 보안을 위해 새로 시작합니다.`);
+        resetSessionCompletely();
+      } else {
+        // 경고 메시지
+        const remainAttempts = 3 - newFailCount;
+        toast.error(`비밀번호가 일치하지 않아요. (${remainAttempts}회 남음)`);
+      }
     }
   };
 
@@ -129,12 +169,12 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         return;
       }
 
-      // ✨ 새 프로필 생성 (유니크 키 설정으로 중복 방지)
+      // 🔐 새 프로필 생성 (전화번호+PIN으로 보호)
       const { data, error } = await supabase
         .from('user_profiles')
         .insert({
           phone: cleanPhone,
-          pin,
+          pin, // PIN(비밀번호) 저장
           nickname: nickname.trim(),
         })
         .select()
@@ -151,8 +191,15 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         return;
       }
 
+      // 🔐 새 세션 생성
       localStorage.removeItem('howl_session_id');
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+      
+      // 🔐 인증 정보 저장
       localStorage.setItem('howl_profile_id', data.id);
+      localStorage.setItem('howl_last_auth_id', data.id);
+      localStorage.setItem('howl_last_auth_time', Date.now().toString());
 
       onAuth({
         id: data.id,
@@ -180,7 +227,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       >
         <div className="text-center mb-5">
           <span className="text-3xl mb-2 block">🔮</span>
-          <h3 className="font-display text-xl font-bold text-foreground neon-glow">KOK TAROT</h3>
+          <h3 className="font-display text-xl font-bold text-foreground neon-glow">콕타로</h3>
           <p className="text-xs text-muted-foreground mt-1">
             {step === 'phone' && '전화번호로 간편하게 시작해요'}
             {step === 'verify_pin' && '비밀번호를 입력해주세요'}
@@ -217,6 +264,16 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
 
         {step === 'verify_pin' && (
           <div className="space-y-3">
+            <div className="glass rounded-2xl p-3 mb-2">
+              <p className="text-xs text-muted-foreground text-center">
+                {pinFailCount > 0 && (
+                  <span className="text-destructive">⚠️ {pinFailCount}회 실패 (3회 초과 시 차단)</span>
+                )}
+                {pinFailCount === 0 && (
+                  <span>비밀번호를 입력해주세요</span>
+                )}
+              </p>
+            </div>
             <input
               value={pin}
               onChange={e => {
@@ -228,17 +285,25 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
               type="password"
               maxLength={4}
               autoFocus
+              disabled={pinFailCount >= 3}
             />
             <button
               onClick={handleVerifyPin}
-              disabled={pin.length !== 4}
+              disabled={pin.length !== 4 || pinFailCount >= 3}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              확인
+              {pinFailCount >= 3 ? '차단됨' : '확인'}
             </button>
             <button
-              onClick={() => { setStep('phone'); setPin(''); }}
-              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => { 
+                setStep('phone'); 
+                setPhone('');
+                setPin('');
+                setExistingProfile(null);
+                setPinFailCount(0);
+              }}
+              disabled={pinFailCount >= 3}
+              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
               ← 번호 다시 입력
             </button>
@@ -259,7 +324,9 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
               maxLength={4}
               autoFocus
             />
-            <p className="text-[10px] text-muted-foreground text-center">다음 방문 시 적립금과 상담 이력을 불러올 수 있어요</p>
+            <p className="text-[10px] text-muted-foreground text-center">
+              🔐 다음 방문 시 이 비밀번호로 로그인하실 수 있어요. 꼭 기억해주세요!
+            </p>
             <button
               onClick={handleNewPin}
               disabled={pin.length !== 4}
