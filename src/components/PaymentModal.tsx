@@ -11,6 +11,8 @@ interface PaymentModalProps {
   onClose: () => void;
   onPaymentSubmit: (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => void;
   couponActive?: boolean;
+  couponCode?: string;
+  couponDiscount?: number;
   userCredits?: number;
 }
 
@@ -18,7 +20,16 @@ interface MenuWithPrice extends Menu {
   price: number;
 }
 
-export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit, couponActive, userCredits = 0 }: PaymentModalProps) {
+export default function PaymentModal({ 
+  menu, 
+  userName, 
+  onClose, 
+  onPaymentSubmit, 
+  couponActive, 
+  couponCode,
+  couponDiscount = 0,
+  userCredits = 0 
+}: PaymentModalProps) {
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
@@ -68,15 +79,19 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
     };
   }, [menu.id, menu]);
 
-  const canUseCoupon = couponActive && menuWithPrice.price >= 9900;
+  // 🎟️ 쿠폰 사용 가능 여부 (9,900원 이상만)
+  const canUseCoupon = couponActive && couponCode && menuWithPrice.price >= 9900;
   const canUseCredits = userCredits > 0 && menuWithPrice.price >= 9900;
 
   let finalPrice = menuWithPrice.price;
+  let discountAmount = 0;
+
   if (discountType === 'coupon' && canUseCoupon) {
-    finalPrice = menuWithPrice.price - 3000;
+    discountAmount = couponDiscount;
+    finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
   } else if (discountType === 'credits' && canUseCredits) {
-    const creditDiscount = Math.min(userCredits, menuWithPrice.price);
-    finalPrice = menuWithPrice.price - creditDiscount;
+    discountAmount = Math.min(userCredits, menuWithPrice.price);
+    finalPrice = menuWithPrice.price - discountAmount;
   }
 
   const handleKakaoPay = () => {
@@ -109,12 +124,29 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
           <div className="text-center mb-5">
             <span className="text-3xl mb-2 block">{menuWithPrice.icon}</span>
             <h3 className="font-display text-lg font-bold text-foreground">{menuWithPrice.name}</h3>
-            <p className="text-2xl font-bold text-primary mt-1">
+            
+            {/* 🎟️ 쿠폰 배너 */}
+            {canUseCoupon && (
+              <div className="mt-2 px-2 py-1 rounded-lg bg-primary/20 border border-primary/30">
+                <p className="text-xs text-primary font-semibold">
+                  🎟️ 쿠폰 '{couponCode}' 사용 가능!
+                </p>
+              </div>
+            )}
+
+            <p className="text-2xl font-bold text-primary mt-3">
               {finalPrice.toLocaleString()}원
-              {finalPrice !== menuWithPrice.price && (
+              {discountAmount > 0 && (
                 <span className="text-sm text-muted-foreground line-through ml-2">{menuWithPrice.price.toLocaleString()}원</span>
               )}
             </p>
+
+            {/* 할인 정보 표시 */}
+            {discountAmount > 0 && (
+              <p className="text-xs text-green-500 mt-1">
+                ✅ {discountAmount.toLocaleString()}원 할인 적용됨
+              </p>
+            )}
           </div>
 
           {/* Discount options */}
@@ -132,8 +164,10 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
                     className="accent-primary"
                   />
                   <div>
-                    <p className="text-xs font-semibold text-foreground">하울랜드 3,000원 할인</p>
-                    <p className="text-[10px] text-muted-foreground">자동 적용 쿠폰</p>
+                    <p className="text-xs font-semibold text-foreground">
+                      🎟️ 쿠폰 '{couponCode}' - {couponDiscount.toLocaleString()}원 할인
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">자동 적용</p>
                   </div>
                 </label>
               )}
@@ -222,6 +256,12 @@ export default function PaymentModal({ menu, userName, onClose, onPaymentSubmit,
                   <span className="text-muted-foreground">금액</span>
                   <span className="font-bold text-primary">{finalPrice.toLocaleString()}원</span>
                 </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm pt-2 border-t border-border">
+                    <span className="text-green-500 font-semibold">할인 적용</span>
+                    <span className="text-green-500 font-semibold">-{discountAmount.toLocaleString()}원</span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => onPaymentSubmit('bank', depositor || userName, phoneTail)}
