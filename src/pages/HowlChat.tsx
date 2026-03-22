@@ -18,7 +18,7 @@ import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
 import { COUNSELORS, getCounselorForMenu } from '@/data/counselors';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
-import { useSiteSettings } from '@/stores/siteSettings';
+import { useSiteSettings, loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Settings } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -500,12 +500,25 @@ export default function HowlChat() {
     });
 
     if (menu.id === 1) {
+      // ✨ 테스트 모드면 결제 스킵
+      if (loadSettings().testMode) {
+        activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
+        addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
+        return;
+      }
       setShowPayment(true);
       return;
     }
 
     if (menu.id === 16) {
       setShowPremiumForm(true);
+      return;
+    }
+
+    // ✨ 테스트 모드면 모든 메뉴 결제 스킵
+    if (loadSettings().testMode) {
+      activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
+      addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
       return;
     }
 
@@ -814,7 +827,7 @@ export default function HowlChat() {
 
       <AnimatePresence>
         {isMenuOpen && (
-          <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} />
+          <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} counselorId={currentCounselor?.id} />
         )}
       </AnimatePresence>
 
