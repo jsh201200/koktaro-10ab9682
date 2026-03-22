@@ -4,6 +4,8 @@ import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingB
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
 import { MENUS } from '@/data/menus';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import CouponManager from '@/components/admin/CouponManager';
 import SiteConfigEditor from '@/components/admin/SiteConfigEditor';
 
@@ -29,6 +31,7 @@ export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState<Tab>('branding');
   const [settings, setSettings] = useState<SiteSettings>(loadSettings);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handlePasswordCheck = (val: string) => {
     setPassword(val);
@@ -38,9 +41,44 @@ export default function AdminSettings() {
     }
   };
 
-  const handleSave = () => {
+  // ✨ 저장 시 localStorage + Supabase DB 동시 저장
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    // 1. localStorage에 저장 (기존 방식)
     saveSettings(settings);
+
+    // 2. 상품 관리 탭이면 Supabase DB에도 반영
+    if (activeTab === 'menus') {
+      const upsertData = MENUS.map(menu => {
+        const override = settings.menuOverrides[menu.id] || {};
+        return {
+          menu_id: menu.id,
+          name: (override.name ?? menu.name) as string,
+          icon: (override.icon ?? menu.icon) as string,
+          desc: (override.desc ?? menu.desc) as string,
+          detail_desc: (override.detailDesc ?? menu.detailDesc) as string,
+          price: (override.price ?? menu.price) as number,
+          enabled: override.enabled !== false,
+          sort_order: menu.id,
+        };
+      });
+
+      const { error } = await supabase
+        .from('products')
+        .upsert(upsertData, { onConflict: 'menu_id' });
+
+      if (error) {
+        toast.error('DB 저장 실패: ' + error.message);
+        setIsSaving(false);
+        return;
+      }
+
+      toast.success('상품 정보가 저장되었습니다! ✨');
+    }
+
     setSaved(true);
+    setIsSaving(false);
     setTimeout(() => setSaved(false), 2000);
   };
 
@@ -68,6 +106,34 @@ export default function AdminSettings() {
     }));
   };
 
+  // ✨ 페이지 진입 시 DB에서 현재 가격 불러와서 settings에 반영
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const loadDbPrices = async () => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+        .order('sort_order');
+
+      if (products && products.length > 0) {
+        const overrides: Record<number, any> = { ...settings.menuOverrides };
+        products.forEach((p: any) => {
+          overrides[p.menu_id] = {
+            ...overrides[p.menu_id],
+            name: p.name,
+            icon: p.icon,
+            desc: p.desc,
+            detailDesc: p.detail_desc,
+            price: p.price,
+            enabled: p.enabled,
+          };
+        });
+        setSettings(prev => ({ ...prev, menuOverrides: overrides }));
+      }
+    };
+    loadDbPrices();
+  }, [isAuthorized]);
+
   if (!isAuthorized) {
     return (
       <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
@@ -94,7 +160,6 @@ export default function AdminSettings() {
 
   return (
     <div className="min-h-svh aurora-bg">
-      {/* Header */}
       <header className="sticky top-0 z-50 glass px-4 py-3 sm:px-6">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -115,16 +180,16 @@ export default function AdminSettings() {
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:shadow-lg transition-all active:scale-95 flex items-center gap-1"
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:shadow-lg transition-all active:scale-95 flex items-center gap-1 disabled:opacity-70"
             >
-              <Save className="w-3 h-3" /> {saved ? '✅ 저장됨!' : '저장'}
+              <Save className="w-3 h-3" /> {isSaving ? '저장 중...' : saved ? '✅ 저장됨!' : '저장'}
             </button>
           </div>
         </div>
       </header>
 
       <div className="max-w-5xl mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-4">
-        {/* Sidebar tabs */}
         <nav className="lg:w-48 flex-shrink-0">
           <div className="flex lg:flex-col gap-1 overflow-x-auto scrollbar-hide">
             {TABS.map(tab => (
@@ -144,7 +209,6 @@ export default function AdminSettings() {
           </div>
         </nav>
 
-        {/* Content */}
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 10 }}
@@ -152,7 +216,6 @@ export default function AdminSettings() {
           className="flex-1 glass-strong rounded-3xl p-5 sm:p-6 glow-border"
         >
           {activeTab === 'site' && <SiteConfigEditor />}
-
           {activeTab === 'coupons' && <CouponManager />}
 
           {activeTab === 'branding' && (
@@ -183,7 +246,6 @@ export default function AdminSettings() {
                 <ColorField label="그라데이션 끝" value={settings.bgGradientEnd} onChange={v => updateField('bgGradientEnd', v)} />
                 <ColorField label="기본 강조색 (Primary)" value={settings.primaryColor} onChange={v => updateField('primaryColor', v)} />
               </div>
-              {/* Preview */}
               <div
                 className="h-24 rounded-2xl shadow-inner border border-white/30"
                 style={{
@@ -218,7 +280,9 @@ export default function AdminSettings() {
           {activeTab === 'menus' && (
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-bold text-secondary-foreground">🛍️ 상품(메뉴) 관리</h2>
-              <p className="text-xs text-muted-foreground">각 메뉴의 이름, 설명, 아이콘, 가격을 수정할 수 있습니다.</p>
+              <p className="text-xs text-muted-foreground">
+                각 메뉴의 이름, 설명, 아이콘, 가격을 수정하고 <strong>저장 버튼</strong>을 누르면 즉시 반영됩니다.
+              </p>
               <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
                 {MENUS.map(menu => {
                   const override = settings.menuOverrides[menu.id] || {};
@@ -340,6 +404,33 @@ export default function AdminSettings() {
               <p className="text-[10px] text-muted-foreground">
                 이 비밀번호는 관리자 대시보드(/admin), 관리자 설정, 채팅 승인 단축키에 사용됩니다.
               </p>
+
+              {/* ✨ 테스트 모드 토글 */}
+              <div className="glass rounded-2xl p-4 border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">🧪 테스트 모드</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      켜두면 결제 없이 모든 상담 바로 시작 가능
+                    </p>
+                    {settings.testMode && (
+                      <p className="text-[10px] text-destructive font-semibold mt-1">
+                        ⚠️ 현재 테스트 모드 ON — 실제 서비스 전에 꼭 끄세요!
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => updateField('testMode', !settings.testMode)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      settings.testMode ? 'bg-primary' : 'bg-muted'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      settings.testMode ? 'translate-x-7' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </motion.div>
@@ -348,7 +439,6 @@ export default function AdminSettings() {
   );
 }
 
-// Reusable field components
 function Field({ label, value, onChange, placeholder, type, small, multiline }: {
   label: string;
   value: string;
