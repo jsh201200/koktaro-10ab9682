@@ -1,14 +1,20 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MENUS, CATEGORY_LABELS, Menu } from '@/data/menus';
 import { X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface MenuGridProps {
   onSelect: (menu: Menu) => void;
   onClose: () => void;
 }
 
-function FlipCard({ menu, onSelect }: { menu: Menu; onSelect: (m: Menu) => void }) {
+interface MenuWithPrice extends Menu {
+  price: number;
+  name: string;
+}
+
+function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuWithPrice) => void }) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const isSnack = menu.isSnack;
@@ -74,7 +80,53 @@ function FlipCard({ menu, onSelect }: { menu: Menu; onSelect: (m: Menu) => void 
 }
 
 export default function MenuGrid({ onSelect, onClose }: MenuGridProps) {
+  const [menusWithPrices, setMenusWithPrices] = useState<MenuWithPrice[]>([]);
   const categories = ['A', 'B', 'C', 'D'] as const;
+
+  // ✨ DB에서 실시간 가격 fetch
+  useEffect(() => {
+    const loadMenusWithPrices = async () => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+        .eq('enabled', true)
+        .order('sort_order');
+
+      if (products) {
+        // MENUS와 products 합치기 (DB 가격으로 업데이트)
+        const merged = MENUS.map(menu => {
+          const product = products.find((p: any) => p.menu_id === menu.id);
+          return {
+            ...menu,
+            name: product?.name || menu.name,
+            price: product?.price || menu.price,
+          } as MenuWithPrice;
+        });
+        setMenusWithPrices(merged);
+      } else {
+        // DB 없으면 기본 MENUS 사용
+        setMenusWithPrices(MENUS.map(m => ({ ...m, price: m.price } as MenuWithPrice)));
+      }
+    };
+
+    loadMenusWithPrices();
+
+    // ✨ 실시간 구독 (DB 변경 시 자동 업데이트)
+    const channel = supabase
+      .channel('products-changes-menu')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        () => {
+          loadMenusWithPrices(); // DB 변경되면 다시 로드
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <motion.div
@@ -95,7 +147,7 @@ export default function MenuGrid({ onSelect, onClose }: MenuGridProps) {
         </div>
 
         {categories.map((cat) => {
-          const items = MENUS.filter((m) => m.category === cat);
+          const items = menusWithPrices.filter((m) => m.category === cat);
           return (
             <div key={cat} className="mb-6">
               <h3 className="text-xs font-bold text-primary tracking-wider uppercase mb-3 pl-1">
