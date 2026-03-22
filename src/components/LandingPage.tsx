@@ -22,6 +22,16 @@ interface OngoingConsult {
   room_id: string;
 }
 
+interface MenuWithPrice {
+  id: number;
+  name: string;
+  icon: string;
+  price: number;
+  category: string;
+  categoryName: string;
+  specialty?: string;
+}
+
 interface LandingPageProps {
   onStartChat: (menuId?: number) => void;
   couponActive: boolean;
@@ -34,9 +44,11 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [ongoingConsults, setOngoingConsults] = useState<Map<string, OngoingConsult>>(new Map());
+  const [menusWithPrices, setMenusWithPrices] = useState<MenuWithPrice[]>([]);
   const { config } = useSiteConfig();
   const [showPopup, setShowPopup] = useState(false);
 
+  // ✨ 리뷰 로드
   useEffect(() => {
     const fetchData = async () => {
       const { data: revs } = await supabase
@@ -48,6 +60,51 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
       if (revs) setReviews(revs as any);
     };
     fetchData();
+  }, []);
+
+  // ✨ 메뉴 + 가격 실시간 로드 (DB에서!)
+  useEffect(() => {
+    const loadMenusWithPrices = async () => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+        .eq('enabled', true)
+        .order('sort_order');
+
+      if (products) {
+        // MENUS와 products 합치기 (DB 가격으로 업데이트)
+        const merged = MENUS.map(menu => {
+          const product = products.find((p: any) => p.menu_id === menu.id);
+          return {
+            ...menu,
+            name: product?.name || menu.name,
+            price: product?.price || menu.price,
+          };
+        });
+        setMenusWithPrices(merged);
+      } else {
+        // DB 없으면 기본 MENUS 사용
+        setMenusWithPrices(MENUS.map(m => ({ ...m, price: m.price })));
+      }
+    };
+
+    loadMenusWithPrices();
+
+    // ✨ 실시간 구독 (DB 변경 시 자동 업데이트)
+    const channel = supabase
+      .channel('products-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        () => {
+          loadMenusWithPrices(); // DB 변경되면 다시 로드
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // ✨ 진행 중인 상담 로드
@@ -63,7 +120,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         .single();
 
       if (sessions && sessions.room_id) {
-        // room_id에서 counselor_id 추출 (room_ian_1234567 -> ian)
         const roomParts = sessions.room_id.split('_');
         const counselorId = roomParts[1];
         const counselor = COUNSELORS.find(c => c.id === counselorId);
@@ -83,16 +139,13 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     loadOngoingConsults();
   }, []);
 
-  // Show popup notice if configured
   useEffect(() => {
     if (config.popup_notice && config.popup_notice.trim()) {
       setShowPopup(true);
     }
   }, [config.popup_notice]);
 
-  // ✨ 상담 시작 (도사별)
   const handleStartConsult = (counselorId: string) => {
-    // 해당 도사의 첫 번째 메뉴로 시작
     const counselor = COUNSELORS.find(c => c.id === counselorId);
     if (counselor && counselor.menuIds.length > 0) {
       const menuId = counselor.menuIds[0];
@@ -100,7 +153,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     }
   };
 
-  // ✨ 상담 이어하기
   const handleContinueConsult = (counselorId: string) => {
     const consult = ongoingConsults.get(counselorId);
     if (consult) {
@@ -111,7 +163,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
 
   return (
     <div className="min-h-svh aurora-bg">
-      {/* Coupon Banner - DB driven */}
       {couponActive && config.banner_text && (
         <motion.div
           initial={{ y: -40 }}
@@ -122,7 +173,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         </motion.div>
       )}
 
-      {/* Popup Notice */}
       <AnimatePresence>
         {showPopup && config.popup_notice && config.popup_notice.trim() && (
           <motion.div
@@ -148,7 +198,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         )}
       </AnimatePresence>
 
-      {/* Hero Banner - DB driven */}
       <section className="relative overflow-hidden px-4 pt-14 pb-8">
         <div className="max-w-2xl mx-auto text-center">
           <motion.div
@@ -165,7 +214,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
             </p>
           </motion.div>
 
-          {/* Counselor List - Slim KakaoTalk Style */}
           <div className="flex flex-col gap-2 mb-8 max-w-md mx-auto">
             {COUNSELORS.map((c, i) => (
               <motion.div
@@ -175,33 +223,27 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                 transition={{ delay: i * 0.05 }}
                 className="relative"
               >
-                {/* ✨ 진행 중인 상담 배지 */}
                 {ongoingConsults.has(c.id) && (
                   <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/10 to-transparent pointer-events-none" />
                 )}
 
                 <div className="flex gap-2">
-                  {/* 도사 프로필 + 정보 */}
                   <button
                     onClick={() => handleStartConsult(c.id)}
                     className="flex-1 flex items-center gap-3 p-3 rounded-xl glass-strong glow-border hover:bg-muted/40 transition-all active:scale-[0.98] group"
                   >
-                    {/* Profile Image */}
                     <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 shadow-md ring-1 ring-primary/20">
                       <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
                     </div>
 
-                    {/* Text Info */}
                     <div className="flex-1 text-left">
                       <p className="text-sm font-semibold text-foreground">{c.name}</p>
                       <p className="text-xs text-muted-foreground">{c.specialty}</p>
                     </div>
 
-                    {/* Arrow */}
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
 
-                  {/* ✨ 상담 시작 버튼 */}
                   <motion.button
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -212,7 +254,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                     상담 시작
                   </motion.button>
 
-                  {/* ✨ 상담 이어하기 버튼 */}
                   {ongoingConsults.has(c.id) && (
                     <motion.button
                       initial={{ opacity: 0, scale: 0.8 }}
@@ -232,7 +273,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         </div>
       </section>
 
-      {/* Credits Check */}
       {userName && (
         <section className="px-4 pb-4">
           <div className="max-w-2xl mx-auto">
@@ -253,7 +293,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         </section>
       )}
 
-      {/* Best Reviews - clickable to /reviews */}
       <section className="px-4 pb-6">
         <div className="max-w-2xl mx-auto">
           <button
@@ -293,7 +332,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
             </div>
           )}
 
-          {/* Write review CTA */}
           <button
             onClick={() => navigate('/reviews')}
             className="w-full mt-3 py-2.5 rounded-2xl glass text-xs font-semibold text-primary hover:bg-muted/40 transition-colors"
@@ -303,7 +341,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         </div>
       </section>
 
-      {/* Footer - DB driven */}
       <footer className="px-4 pb-6">
         <div className="max-w-2xl mx-auto text-center">
           <p className="text-[9px] text-muted-foreground/60 leading-relaxed">
