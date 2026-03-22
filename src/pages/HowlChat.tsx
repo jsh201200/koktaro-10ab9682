@@ -19,7 +19,7 @@ import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
 import { useSiteSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
-import { Settings } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -56,12 +56,13 @@ export default function HowlChat() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [showBetaModal, setShowBetaModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
 
   const couponCode = searchParams.get('coupon');
-  const couponActive = !!couponCode; // Will validate against DB coupons
+  const couponActive = !!couponCode;
 
   // Load products from DB
   useEffect(() => {
@@ -72,9 +73,6 @@ export default function HowlChat() {
     loadProducts();
   }, []);
 
-  // Check for existing profile — REQUIRE PIN re-verification
-  // We only auto-restore profile if the profile_id is in localStorage
-  // The actual session data is only loaded after PIN verification in PhoneAuth
   useEffect(() => {
     const profileId = localStorage.getItem('howl_profile_id');
     if (profileId) {
@@ -98,7 +96,6 @@ export default function HowlChat() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Initial greeting when entering chat
   useEffect(() => {
     if (view === 'chat' && !greetingSent.current && messages.length === 0) {
       greetingSent.current = true;
@@ -113,7 +110,6 @@ export default function HowlChat() {
     }
   }, [view, messages.length]);
 
-  // Session timer
   useEffect(() => {
     if (session.sessionExpiry && session.isPaid) {
       setTimerExpired(false);
@@ -122,6 +118,9 @@ export default function HowlChat() {
         setSessionTime(remaining);
         if (remaining === 300) {
           addSystemMessage("기운이 다해가고 있어! 5분 뒤면 상담이 종료되니 서둘러줘! ✨");
+        }
+        if (remaining === 60) {
+          addSystemMessage("⏰ 1분 남았어! 마지막으로 궁금한 거 물어봐줄래?");
         }
         if (remaining <= 0) {
           setTimerExpired(true);
@@ -133,7 +132,6 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid]);
 
-  // Realtime payment approval
   useEffect(() => {
     if (!session.dbSessionId) return;
     const channel = supabase
@@ -218,7 +216,6 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    // Name collection
     if (!session.userName && !userProfile?.nickname) {
       const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
       if (name) {
@@ -233,7 +230,6 @@ export default function HowlChat() {
       return;
     }
 
-    // Timer expired — show beta bypass or payment
     if (timerExpired) {
       if (settings.betaMode) {
         setShowBetaModal(true);
@@ -243,7 +239,6 @@ export default function HowlChat() {
       return;
     }
 
-    // Session limits
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
@@ -255,7 +250,6 @@ export default function HowlChat() {
       updateSession({ questionCount: session.questionCount + 1 });
     }
 
-    // Scan animation
     if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
       setShowScan(image);
       return;
@@ -272,7 +266,6 @@ export default function HowlChat() {
       session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
     );
 
-    // After free reading, offer payment
     if (session.selectedMenu && !session.isPaid && !session.freeReadingDone) {
       updateSession({ freeReadingDone: true });
       setTimeout(() => {
@@ -284,16 +277,20 @@ export default function HowlChat() {
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
+    // ✨ room_id 생성 (도사ID + 타임스탬프)
+    const counselor = getCounselorForMenu(menu.id);
+    const roomId = `room_${counselor.id}_${Date.now()}`;
+
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
     const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
 
-    const counselor = getCounselorForMenu(menu.id);
     updateSession({
       selectedMenu: actualMenu,
       freeReadingDone: false,
       questionCount: 0,
       imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
+      roomId, // ✨ room_id 저장
     });
 
     if (menu.id === 16) {
@@ -329,13 +326,26 @@ export default function HowlChat() {
     );
   };
 
-  // Beta mode: free bypass
   const handleBetaBypass = () => {
     if (!session.selectedMenu) return;
     const product = dbProducts.find(p => p.menu_id === session.selectedMenu!.id);
     const durationMin = product?.duration_minutes || 30;
     activatePaidMode(durationMin, session.selectedMenu.id, session.selectedMenu.name, 0);
     toast.success("🎉 무료 베타 테스트 모드로 상담을 이어갑니다!");
+  };
+
+  const handleExitChat = async (deleteChat: boolean) => {
+    setShowExitModal(false);
+    
+    if (deleteChat) {
+      // ✨ 대화 내용 삭제
+      await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
+      addSystemMessage("대화 내용이 삭제되었습니다.");
+    }
+    
+    resetSession();
+    setView('landing');
+    toast.info("상담을 종료했습니다 ✨");
   };
 
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
@@ -435,7 +445,6 @@ export default function HowlChat() {
     localStorage.setItem('howl_profile_id', profile.id);
     updateSession({ userName: profile.nickname });
 
-    // Link profile to session
     if (session.dbSessionId) {
       supabase.from('chat_sessions').update({ profile_id: profile.id, user_nickname: profile.nickname }).eq('id', session.dbSessionId);
     }
@@ -457,7 +466,6 @@ export default function HowlChat() {
     }
   };
 
-  // Landing page view
   if (view === 'landing') {
     return (
       <>
@@ -485,7 +493,6 @@ export default function HowlChat() {
     );
   }
 
-  // Auth view
   if (view === 'auth') {
     return (
       <div className="min-h-svh aurora-bg">
@@ -497,7 +504,6 @@ export default function HowlChat() {
     );
   }
 
-  // Chat view
   const currentCounselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : null;
 
   return (
@@ -507,7 +513,33 @@ export default function HowlChat() {
         counselorName={currentCounselor?.name}
         counselorImage={currentCounselor?.image}
         onBack={() => setView('landing')}
+        onExit={() => setShowExitModal(true)}
       />
+
+      {/* Exit Chat Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowExitModal(false)} />
+          <div className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border text-center">
+            <h3 className="font-display text-lg font-bold text-foreground mb-3">상담을 종료할까요?</h3>
+            <p className="text-sm text-muted-foreground mb-6">대화 내용을 어떻게 할까요?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleExitChat(false)}
+                className="flex-1 py-2.5 rounded-2xl glass text-sm font-semibold hover:bg-muted/40 transition-colors"
+              >
+                이어하기
+              </button>
+              <button
+                onClick={() => handleExitChat(true)}
+                className="flex-1 py-2.5 rounded-2xl bg-destructive/20 text-destructive text-sm font-semibold hover:bg-destructive/30 transition-colors"
+              >
+                삭제하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {session.isPaid && (sessionTime !== null || timerExpired) && (
         <ConsultTimer
@@ -552,7 +584,6 @@ export default function HowlChat() {
         }
       />
 
-      {/* Beta mode free bypass button */}
       {session.freeReadingDone && !session.isPaid && session.selectedMenu && (
         <div className="fixed bottom-[120px] w-full px-4 z-40">
           <div className="max-w-2xl mx-auto">
@@ -581,7 +612,6 @@ export default function HowlChat() {
         </div>
       )}
 
-      {/* Beta modal on timer expire */}
       {showBetaModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowBetaModal(false)} />
