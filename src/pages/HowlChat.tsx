@@ -231,6 +231,42 @@ export default function HowlChat() {
   }, [session.dbSessionId, session.userName, dbProducts]);
 
   const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
+    // 🎟️ 1,000원 상품 (한 뼘 운세) - 즉시 결과값 출력
+    if (menuId === 1) {
+      updateSession({
+        isPaid: true,
+        sessionExpiry: null, // 타이머 없음
+        maxQuestions: 0,
+        questionCount: 0,
+        paymentPending: false,
+      });
+      setTimerExpired(false);
+      addSystemMessage("💜 결제가 승인되었습니다!");
+      toast.success("입금 확인 완료! ✨");
+
+      const name = session.userName || userProfile?.nickname || '';
+      
+      // 바로 결과값 출력 (질문 없이)
+      setTimeout(() => {
+        addBotMessage(
+          `✨ 럭키 컬러: 파란색\n` +
+          `🍽️ 추천 음식: 흰쌀밥\n` +
+          `🪬 오늘의 부적: 대나무`
+        );
+      }, 500);
+
+      // 2초 후 자동 종료
+      setTimeout(() => {
+        addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+        updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+        setSessionTime(null);
+        setShowReview(true);
+      }, 2500);
+
+      return;
+    }
+
+    // 일반 결제 상담 (30분 이상)
     updateSession({
       isPaid: true,
       sessionExpiry: Date.now() + durationMin * 60 * 1000,
@@ -316,46 +352,19 @@ export default function HowlChat() {
     }, 2000);
   }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
 
-  // ✨ 1,000원 상품(한 뼘 운세) 스낵 포맷 처리
-  const handleSnackConsultation = useCallback(async (menu: Menu) => {
-    const counselor = getCounselorForMenu(menu.id);
-
-    addSystemMessage(`${menu.icon} ${counselor.name}의 ${menu.name} 상담을 시작합니다`);
-
-    setIsTyping(true);
-    await delayedTyping();
-    setIsTyping(false);
-
-    const name = session.userName || userProfile?.nickname || '';
-    addBotMessage(
-      `${name}${name ? '님, ' : ''}오늘의 기운을 읽어볼게요! 🔮\n\n` +
-      `[당신의 오늘 운명]`
-    );
-
-    // 1초 후 결과 출력
-    setTimeout(async () => {
-      setIsTyping(true);
-      await delayedTyping();
-      setIsTyping(false);
-
-      addBotMessage(
-        `✨ 럭키 컬러: 파란색\n` +
-        `🍽️ 추천 음식: 흰쌀밥\n` +
-        `🪬 오늘의 부적: 대나무`
-      );
-
-      // 2초 후 종료
-      setTimeout(() => {
-        addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
-        updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
-        setSessionTime(null);
-        setShowReview(true);
-      }, 2000);
-    }, 1000);
-  }, [session.userName, userProfile?.nickname, addBotMessage, addSystemMessage, delayedTyping, updateSession, setSessionTime, setIsTyping, setShowReview]);
+  // ✨ 1,000원 상품은 activatePaidMode()에서 처리하므로 제거
 
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
+
+    // 🎟️ 1,000원 상품 - 1회 질문만 허용 후 즉시 차단
+    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 1) {
+      addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+      updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+      setSessionTime(null);
+      setShowReview(true);
+      return;
+    }
 
     // ✨ 결제 고객 기억력: 결제 완료자면 이름 묻지 않고 바로 진행
     if (session.isPaid && session.selectedMenu) {
@@ -438,12 +447,6 @@ export default function HowlChat() {
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
-    // ✨ 1,000원 상품은 스낵 포맷으로 처리
-    if (menu.id === 1) {
-      handleSnackConsultation(menu);
-      return;
-    }
-
     const counselor = getCounselorForMenu(menu.id);
     const roomId = `room_${counselor.id}_${Date.now()}`;
 
@@ -458,6 +461,12 @@ export default function HowlChat() {
       userName: session.userName || userProfile?.nickname || '',
       roomId,
     });
+
+    // ✨ 1,000원 상품도 결제 모달을 띄움 (결제 필수!)
+    if (menu.id === 1) {
+      setShowPayment(true);
+      return;
+    }
 
     if (menu.id === 16) {
       setShowPremiumForm(true);
