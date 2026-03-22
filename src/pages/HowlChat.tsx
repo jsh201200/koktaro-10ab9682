@@ -15,7 +15,7 @@ import PremiumReport from '@/components/PremiumReport';
 import ScanAnimation from '@/components/ScanAnimation';
 import { useChat } from '@/hooks/useChat';
 import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
-import { getCounselorForMenu } from '@/data/counselors';
+import { COUNSELORS, getCounselorForMenu } from '@/data/counselors';
 import { getGeminiResponse } from '@/lib/gemini';
 import { sendDiscordAlert } from '@/lib/discord';
 import { useSiteSettings } from '@/stores/siteSettings';
@@ -81,7 +81,6 @@ export default function HowlChat() {
       const storedProfileId = localStorage.getItem('howl_profile_id');
       const lastAuthId = localStorage.getItem('howl_last_auth_id');
       
-      // 세션이 없으면 새 세션 생성
       if (!storedSessionId) {
         const newSessionId = `session_${Date.now()}_${Math.random()}`;
         localStorage.setItem('howl_session_id', newSessionId);
@@ -90,7 +89,6 @@ export default function HowlChat() {
         return;
       }
 
-      // 프로필 ID가 변경되었거나 다른 사용자면 새 세션 생성
       if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
         console.warn('⚠️ 세션 사용자 변경 감지 - 새 세션 생성');
         const newSessionId = `session_${Date.now()}_${Math.random()}`;
@@ -105,7 +103,6 @@ export default function HowlChat() {
         return;
       }
 
-      // 저장된 프로필 로드
       if (storedProfileId) {
         const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
         if (data) {
@@ -133,7 +130,6 @@ export default function HowlChat() {
     loadProducts();
   }, []);
 
-  // 🎟️ site_settings에서 쿠폰 데이터 fetch
   useEffect(() => {
     const fetchCoupon = async () => {
       const { data, error } = await supabase
@@ -149,7 +145,6 @@ export default function HowlChat() {
 
     fetchCoupon();
 
-    // 실시간 구독 (쿠폰 변경되면 자동 반영)
     const channel = supabase
       .channel('coupon-updates')
       .on(
@@ -192,7 +187,6 @@ export default function HowlChat() {
     }
   }, []);
 
-  // ✨ 아이스브레이킹: 시간별 센스있는 멘트
   const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
     const hour = new Date().getHours();
 
@@ -209,7 +203,6 @@ export default function HowlChat() {
       timeGreeting = '밤은 진실이 드러나는 시간이에요';
     }
 
-    // 도사별 톤 적용
     const counselorTones: { [key: string]: string } = {
       'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
       'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
@@ -285,11 +278,10 @@ export default function HowlChat() {
   }, [session.dbSessionId, session.userName, dbProducts]);
 
   const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
-    // 🎟️ 1,000원 상품 (한 뼘 운세) - 즉시 결과값 출력
     if (menuId === 1) {
       updateSession({
         isPaid: true,
-        sessionExpiry: null, // 타이머 없음
+        sessionExpiry: null,
         maxQuestions: 0,
         questionCount: 0,
         paymentPending: false,
@@ -300,7 +292,6 @@ export default function HowlChat() {
 
       const name = session.userName || userProfile?.nickname || '';
       
-      // 바로 결과값 출력 (질문 없이)
       setTimeout(() => {
         addBotMessage(
           `✨ 럭키 컬러: 파란색\n` +
@@ -309,7 +300,6 @@ export default function HowlChat() {
         );
       }, 500);
 
-      // 2초 후 자동 종료
       setTimeout(() => {
         addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
         updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
@@ -320,7 +310,6 @@ export default function HowlChat() {
       return;
     }
 
-    // 일반 결제 상담 (30분 이상)
     updateSession({
       isPaid: true,
       sessionExpiry: Date.now() + durationMin * 60 * 1000,
@@ -379,7 +368,6 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
-  // ✨ 크로스셀링 함수
   const handleCrossSelling = useCallback(() => {
     const currentCounselor = session.selectedMenu
       ? getCounselorForMenu(session.selectedMenu.id)
@@ -409,7 +397,6 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    // 🎟️ 1,000원 상품 - 1회 질문만 허용 후 즉시 차단
     if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 1) {
       addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
       updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
@@ -418,12 +405,10 @@ export default function HowlChat() {
       return;
     }
 
-    // ✨ 결제 고객 기억력: 결제 완료자면 이름 묻지 않고 바로 진행
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
 
-        // ✨ 크로스셀링 로직
         setTimeout(() => {
           handleCrossSelling();
         }, 1500);
@@ -452,7 +437,6 @@ export default function HowlChat() {
       return;
     }
 
-    // ✨ 미결제 상태 체크
     if (!session.userName && !userProfile?.nickname) {
       const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
       if (name) {
@@ -512,9 +496,9 @@ export default function HowlChat() {
       imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
       roomId,
+      counselorId: counselor.id, // ✨ 메뉴 선택 시 counselorId 저장
     });
 
-    // ✨ 1,000원 상품도 결제 모달을 띄움 (결제 필수!)
     if (menu.id === 1) {
       setShowPayment(true);
       return;
@@ -554,7 +538,6 @@ export default function HowlChat() {
       addSystemMessage("대화 내용이 삭제되었습니다.");
     }
 
-    // 🔐 세션 완전 초기화
     localStorage.removeItem('howl_session_id');
     localStorage.removeItem('howl_profile_id');
     const newSessionId = `session_${Date.now()}_${Math.random()}`;
@@ -576,7 +559,6 @@ export default function HowlChat() {
     let discountType = '';
     let finalPrice = dbPrice;
 
-    // 🎟️ site_settings의 쿠폰 자동 적용
     if (couponData.couponActive && couponData.couponCode && dbPrice >= 9900) {
       discountAmount = couponData.couponDiscount;
       discountType = 'site_coupon';
@@ -663,8 +645,6 @@ export default function HowlChat() {
   const handleAuthComplete = (profile: UserProfile) => {
     setUserProfile(profile);
     localStorage.setItem('howl_profile_id', profile.id);
-    
-    // 🔐 현재 세션ID와 함께 저장 (나중에 세션 검증에 사용)
     localStorage.setItem('howl_last_auth_id', profile.id);
     localStorage.setItem('howl_last_auth_time', Date.now().toString());
     
@@ -677,7 +657,8 @@ export default function HowlChat() {
     setView('chat');
   };
 
-  const handleStartChat = (menuId?: number) => {
+  // ✨ counselorId도 받아서 session에 저장
+  const handleStartChat = (menuId?: number, counselorId?: string) => {
     if (!userProfile && !localStorage.getItem('howl_profile_id')) {
       setView('auth');
     } else {
@@ -685,6 +666,10 @@ export default function HowlChat() {
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
         if (menu) {
+          // counselorId를 session에 먼저 저장
+          if (counselorId) {
+            updateSession({ counselorId });
+          }
           setTimeout(() => handleMenuSelect(menu), 500);
         }
       }
@@ -729,7 +714,12 @@ export default function HowlChat() {
     );
   }
 
-  const currentCounselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : null;
+  // ✨ selectedMenu가 있으면 메뉴 기반, 없으면 counselorId로 상담사 찾기
+  const currentCounselor = session.selectedMenu
+    ? getCounselorForMenu(session.selectedMenu.id)
+    : session.counselorId
+      ? COUNSELORS.find(c => c.id === session.counselorId) || null
+      : null;
 
   return (
     <div className="min-h-svh aurora-bg">
