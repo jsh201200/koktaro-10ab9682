@@ -26,12 +26,11 @@ export default function PremiumReport({
     window.print();
   };
 
-  // 📄 채팅 메시지를 페이지별로 분할 (10페이지)
   const totalMessages = chatMessages.filter(m => m.role !== 'system').length;
-  const messagesPerPage = Math.ceil(totalMessages / 9); // 첫 페이지는 표지, 나머지 9페이지
+  const messagesPerPage = Math.ceil(totalMessages / 9);
   
   const getPageNumber = (messageIndex: number) => {
-    return Math.floor(messageIndex / messagesPerPage) + 2; // 페이지 2부터 시작
+    return Math.floor(messageIndex / messagesPerPage) + 2;
   };
 
   return (
@@ -62,7 +61,7 @@ export default function PremiumReport({
         <div className="space-y-2 text-center text-sm text-muted-foreground">
           <p>상담사: {counselorName}</p>
           <p>고객명: {userName}</p>
-          <p>총 {Math.min(10, Math.ceil(totalMessages / messagesPerPage) + 1)}페이지</p>
+          <p>총 페이지</p>
         </div>
 
         <button
@@ -78,10 +77,9 @@ export default function PremiumReport({
         </p>
       </motion.div>
 
-      {/* 🖨️ Print 영역 (화면에서는 숨김, 인쇄할 때만 표시) */}
-      <div id="premium-report" className="hidden print:block w-full print:w-screen print:h-screen print:bg-white">
-        {/* =============== PAGE 1: 표지 =============== */}
-        <div className="w-full h-screen bg-white p-12 flex flex-col justify-center items-center text-center print:break-after-page">
+      <div id="premium-report" className="hidden print:block w-full">
+        {/* 표지 */}
+        <div className="w-full min-h-screen bg-white p-12 flex flex-col justify-center items-center text-center page-break">
           <div className="mb-8">
             <span className="text-6xl">✨</span>
           </div>
@@ -107,53 +105,68 @@ export default function PremiumReport({
           </div>
         </div>
 
-        {/* =============== PAGE 2-10: 상담 내용 =============== */}
+        {/* 상담 내용 */}
         {chatMessages
           .filter(m => m.role !== 'system')
-          .map((message, index) => {
-            const pageNum = getPageNumber(index);
-            const isNewPage = index > 0 && index % messagesPerPage === 0;
+          .map((message, index) => (
+            <div
+              key={message.id || index}
+              className="w-full min-h-screen bg-white p-12 flex flex-col page-break"
+            >
+              <div className="mb-6 pb-4 border-b-2 border-gray-200">
+                <h3 className="text-xl font-bold text-gray-900">{menuName}</h3>
+                <p className="text-sm text-gray-600 mt-1">상담사: {counselorName}</p>
+              </div>
 
-            return (
-              <div
-                key={message.id || index}
-                className={`w-full min-h-screen bg-white p-12 flex flex-col ${
-                  isNewPage ? 'print:break-before-page' : ''
-                }`}
-              >
-                {/* 페이지 헤더 */}
-                <div className="mb-6 pb-4 border-b-2 border-gray-200">
-                  <h3 className="text-xl font-bold text-gray-900">{menuName}</h3>
-                  <p className="text-sm text-gray-600 mt-1">상담사: {counselorName}</p>
-                </div>
+              <div className="flex-1 mb-6">
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base">
+                  {message.content}
+                </p>
+              </div>
 
-                {/* 상담 내용 */}
-                <div className="flex-1 mb-6">
-                  <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base">
-                    {message.content}
-                  </p>
-                </div>
-
-                {/* 페이지 푸터 */}
-                <div className="flex justify-between items-end pt-6 border-t border-gray-200">
-                  <p className="text-xs text-gray-500">
-                    {userName} | {new Date().toLocaleDateString('ko-KR')}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <div className="text-center">
-                      <div className="text-xs text-gray-500 mb-1">Official Certification</div>
-                      <div className="border-2 border-purple-200 rounded px-3 py-1">
-                        <p className="text-[10px] font-bold text-purple-600">KOKK</p>
-                        <p className="text-[8px] text-gray-600">AI Report</p>
-                      </div>
+              <div className="flex justify-between items-end pt-6 border-t border-gray-200">
+                <p className="text-xs text-gray-500">
+                  {userName} | {new Date().toLocaleDateString('ko-KR')}
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="text-center">
+                    <div className="text-xs text-gray-500 mb-1">Official</div>
+                    <div className="border-2 border-purple-200 rounded px-2 py-1">
+                      <p className="text-[10px] font-bold text-purple-600">KOKK</p>
+                      <p className="text-[8px] text-gray-600">Report</p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900">{pageNum}/10</p>
                   </div>
+                  <p className="text-sm font-semibold text-gray-900">{getPageNumber(index)}/10</p>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
       </div>
+
+      <style>{`
+        @media print {
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+          .print\\:block {
+            display: block !important;
+          }
+          .page-break {
+            page-break-after: always;
+            margin: 0;
+            padding: 48px;
+          }
+          @page {
+            size: A4;
+            margin: 0;
+          }
+        }
+      `}</style>
     </motion.div>
   );
 }
