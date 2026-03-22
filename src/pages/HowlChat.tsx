@@ -418,14 +418,7 @@ useEffect(() => {
 
     addSystemMessage(`${actualMenu.icon} ${counselor.name}의 ${actualMenu.name} 상담을 시작합니다`);
 
-    const guide = MENU_WELCOME_GUIDES[menu.id];
-    if (guide) {
-      setIsTyping(true);
-      await delayedTyping();
-      setIsTyping(false);
-      const name = session.userName || userProfile?.nickname || '';
-      addBotMessage(`${name}${name ? '님, ' : ''}${guide}`);
-    }
+    MENU_WELCOME_GUIDE
   };
 
   const handleScanComplete = async () => {
