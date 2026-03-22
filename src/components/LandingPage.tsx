@@ -105,25 +105,33 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
             </p>
           </motion.div>
 
-          {/* Counselor Avatars */}
-          <div className="flex justify-center gap-4 mb-8">
-            {COUNSELORS.map((c, i) => (
-              <motion.button
-                key={c.id}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.1 }}
-                onClick={() => onStartChat()}
-                className="text-center group"
-              >
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden shadow-lg ring-2 ring-primary/30 ring-offset-2 ring-offset-background mx-auto group-hover:ring-primary/60 transition-all">
-                  <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
-                </div>
-                <p className="text-[11px] font-semibold text-foreground mt-1.5">{c.name}</p>
-                <p className="text-[9px] text-muted-foreground">{c.specialty}</p>
-              </motion.button>
-            ))}
-          </div>
+         {/* Counselor List - Slim KakaoTalk Style */}
+<div className="flex flex-col gap-2 mb-8 max-w-md mx-auto">
+  {COUNSELORS.map((c, i) => (
+    <motion.button
+      key={c.id}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: i * 0.05 }}
+      onClick={() => onStartChat()}
+      className="flex items-center gap-3 p-3 rounded-xl glass-strong glow-border hover:bg-muted/40 transition-all active:scale-[0.98] group"
+    >
+      {/* Profile Image */}
+      <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 shadow-md ring-1 ring-primary/20">
+        <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
+      </div>
+      
+      {/* Text Info */}
+      <div className="flex-1 text-left">
+        <p className="text-sm font-semibold text-foreground">{c.name}</p>
+        <p className="text-xs text-muted-foreground">{c.specialty}</p>
+      </div>
+
+      {/* Arrow */}
+      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+    </motion.button>
+  ))}
+</div>
 
           <button
             onClick={() => onStartChat()}
