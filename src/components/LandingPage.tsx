@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { COUNSELORS } from '@/data/counselors';
-import { Star, Gift, Sparkles, ChevronRight, X } from 'lucide-react';
+import { Star, Gift, Sparkles, ChevronRight, X, Play } from 'lucide-react';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
 
 interface Review {
@@ -13,6 +13,12 @@ interface Review {
   rating: number;
   menu_name: string | null;
   created_at: string;
+}
+
+interface OngoingConsult {
+  counselor_id: string;
+  counselor_name: string;
+  room_id: string;
 }
 
 interface LandingPageProps {
@@ -26,6 +32,7 @@ interface LandingPageProps {
 export default function LandingPage({ onStartChat, couponActive, userCredits, userName, onCheckCredits }: LandingPageProps) {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [ongoingConsults, setOngoingConsults] = useState<Map<string, OngoingConsult>>(new Map());
   const { config } = useSiteConfig();
   const [showPopup, setShowPopup] = useState(false);
 
@@ -42,12 +49,54 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     fetchData();
   }, []);
 
+  // ✨ 진행 중인 상담 로드
+  useEffect(() => {
+    const loadOngoingConsults = async () => {
+      const sessionId = localStorage.getItem('howl_session_id');
+      if (!sessionId) return;
+
+      const { data: sessions } = await supabase
+        .from('chat_sessions')
+        .select('id, room_id, selected_menu_id')
+        .eq('id', sessionId)
+        .single();
+
+      if (sessions && sessions.room_id) {
+        // room_id에서 counselor_id 추출 (room_ian_1234567 -> ian)
+        const roomParts = sessions.room_id.split('_');
+        const counselorId = roomParts[1];
+        const counselor = COUNSELORS.find(c => c.id === counselorId);
+
+        if (counselor) {
+          const consults = new Map();
+          consults.set(counselorId, {
+            counselor_id: counselorId,
+            counselor_name: counselor.name,
+            room_id: sessions.room_id,
+          });
+          setOngoingConsults(consults);
+        }
+      }
+    };
+
+    loadOngoingConsults();
+  }, []);
+
   // Show popup notice if configured
   useEffect(() => {
     if (config.popup_notice && config.popup_notice.trim()) {
       setShowPopup(true);
     }
   }, [config.popup_notice]);
+
+  // ✨ 상담 이어하기
+  const handleContinueConsult = (counselorId: string) => {
+    const consult = ongoingConsults.get(counselorId);
+    if (consult) {
+      localStorage.setItem('continue_room_id', consult.room_id);
+      onStartChat();
+    }
+  };
 
   return (
     <div className="min-h-svh aurora-bg">
@@ -105,33 +154,58 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
             </p>
           </motion.div>
 
-         {/* Counselor List - Slim KakaoTalk Style */}
-<div className="flex flex-col gap-2 mb-8 max-w-md mx-auto">
-  {COUNSELORS.map((c, i) => (
-    <motion.button
-      key={c.id}
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: i * 0.05 }}
-      onClick={() => onStartChat()}
-      className="flex items-center gap-3 p-3 rounded-xl glass-strong glow-border hover:bg-muted/40 transition-all active:scale-[0.98] group"
-    >
-      {/* Profile Image */}
-      <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 shadow-md ring-1 ring-primary/20">
-        <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
-      </div>
-      
-      {/* Text Info */}
-      <div className="flex-1 text-left">
-        <p className="text-sm font-semibold text-foreground">{c.name}</p>
-        <p className="text-xs text-muted-foreground">{c.specialty}</p>
-      </div>
+          {/* Counselor List - Slim KakaoTalk Style */}
+          <div className="flex flex-col gap-2 mb-8 max-w-md mx-auto">
+            {COUNSELORS.map((c, i) => (
+              <motion.div
+                key={c.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="relative"
+              >
+                {/* ✨ 진행 중인 상담 배지 */}
+                {ongoingConsults.has(c.id) && (
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/10 to-transparent pointer-events-none" />
+                )}
 
-      {/* Arrow */}
-      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-    </motion.button>
-  ))}
-</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onStartChat()}
+                    className="flex-1 flex items-center gap-3 p-3 rounded-xl glass-strong glow-border hover:bg-muted/40 transition-all active:scale-[0.98] group"
+                  >
+                    {/* Profile Image */}
+                    <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 shadow-md ring-1 ring-primary/20">
+                      <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
+                    </div>
+
+                    {/* Text Info */}
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-semibold text-foreground">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.specialty}</p>
+                    </div>
+
+                    {/* Arrow */}
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </button>
+
+                  {/* ✨ 상담 이어하기 버튼 */}
+                  {ongoingConsults.has(c.id) && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      onClick={() => handleContinueConsult(c.id)}
+                      className="px-3 py-3 rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition-all active:scale-[0.95] flex items-center gap-1.5 font-semibold text-xs"
+                      title="상담 이어하기"
+                    >
+                      <Play className="w-3 h-3 fill-primary" />
+                      이어하기
+                    </motion.button>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
 
           <button
             onClick={() => onStartChat()}
