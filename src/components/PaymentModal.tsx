@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
+import { formatElla, formatEllaWithWon } from '@/lib/ella';
 
 interface PaymentModalProps {
   menu: Menu;
@@ -40,12 +40,10 @@ export default function PaymentModal({
   const s = loadSettings();
   const [searchParams] = useSearchParams();
 
-  // 🌐 URL 파라미터에서 쿠폰 감지 (?coupon=KOKK3000)
   const urlCoupon = searchParams.get('coupon');
   const hasUrlCoupon = urlCoupon === 'KOKK3000' || urlCoupon === 'HOWL3000';
-  const URL_COUPON_DISCOUNT = 3000; // 3,000원 할인
+  const URL_COUPON_DISCOUNT = 3000;
 
-  // ✨ DB에서 실시간 가격 fetch
   useEffect(() => {
     const loadMenuPrice = async () => {
       const { data: product } = await supabase
@@ -65,29 +63,19 @@ export default function PaymentModal({
 
     loadMenuPrice();
 
-    // ✨ 실시간 구독 (가격 변경 시 자동 업데이트)
     const channel = supabase
       .channel(`product-${menu.id}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'products',
-          filter: `menu_id=eq.${menu.id}`
-        },
-        () => {
-          loadMenuPrice(); // 가격 변경되면 다시 로드
-        }
-      )
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'products',
+        filter: `menu_id=eq.${menu.id}`
+      }, () => { loadMenuPrice(); })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [menu.id, menu]);
 
-  // 🎟️ 쿠폰 사용 가능 여부 (9,900원 이상만)
   const canUseCoupon = couponActive && couponCode && menuWithPrice.price >= 9900;
   const canUseCredits = userCredits > 0 && menuWithPrice.price >= 9900;
   const canUseUrlCoupon = hasUrlCoupon && menuWithPrice.price >= 9900;
@@ -96,19 +84,18 @@ export default function PaymentModal({
   let discountAmount = 0;
   let discountLabel = '';
 
-  // 🔐 중복 방지: 하나만 선택 가능
   if (discountType === 'coupon' && canUseCoupon) {
     discountAmount = couponDiscount;
     finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
-    discountLabel = `쿠폰 '${couponCode}' ${discountAmount.toLocaleString()}원 할인`;
+    discountLabel = `쿠폰 '${couponCode}' ${formatElla(discountAmount)} 할인`;
   } else if (discountType === 'credits' && canUseCredits) {
     discountAmount = Math.min(userCredits, menuWithPrice.price);
     finalPrice = menuWithPrice.price - discountAmount;
-    discountLabel = `적립금 ${discountAmount.toLocaleString()}원 사용`;
+    discountLabel = `적립금 ${formatElla(discountAmount)} 사용`;
   } else if (discountType === 'urlcoupon' && canUseUrlCoupon) {
     discountAmount = URL_COUPON_DISCOUNT;
     finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
-    discountLabel = `콕타로 귀빈 ${discountAmount.toLocaleString()}원 할인`;
+    discountLabel = `콕타로 귀빈 ${formatElla(discountAmount)} 할인`;
   }
 
   const handleKakaoPay = () => {
@@ -142,16 +129,14 @@ export default function PaymentModal({
             <span className="text-3xl mb-2 block">{menuWithPrice.icon}</span>
             <h3 className="font-display text-lg font-bold text-foreground">{menuWithPrice.name}</h3>
             
-            {/* 🌐 URL 쿠폰 배너 */}
             {canUseUrlCoupon && (
               <div className="mt-2 px-2 py-1 rounded-lg bg-gradient-to-r from-primary/20 to-pink-500/20 border border-primary/30">
                 <p className="text-xs text-primary font-semibold">
-                  💫 콕타로 귀빈 3,000원 할인 중!
+                  💫 콕타로 귀빈 {formatElla(URL_COUPON_DISCOUNT)} 할인 중!
                 </p>
               </div>
             )}
 
-            {/* 🎟️ site_settings 쿠폰 배너 */}
             {canUseCoupon && !canUseUrlCoupon && (
               <div className="mt-2 px-2 py-1 rounded-lg bg-primary/20 border border-primary/30">
                 <p className="text-xs text-primary font-semibold">
@@ -160,14 +145,16 @@ export default function PaymentModal({
               </div>
             )}
 
+            {/* ✨ 엘라 + 원화 동시 표시 */}
             <p className="text-2xl font-bold text-primary mt-3">
-              {finalPrice.toLocaleString()}원
+              {formatEllaWithWon(finalPrice)}
               {discountAmount > 0 && (
-                <span className="text-sm text-muted-foreground line-through ml-2">{menuWithPrice.price.toLocaleString()}원</span>
+                <span className="text-sm text-muted-foreground line-through ml-2">
+                  {formatElla(menuWithPrice.price)}
+                </span>
               )}
             </p>
 
-            {/* 할인 정보 표시 */}
             {discountAmount > 0 && (
               <p className="text-xs text-green-500 mt-1">
                 ✅ {discountLabel}
@@ -175,75 +162,46 @@ export default function PaymentModal({
             )}
           </div>
 
-          {/* Discount options - 중복 방지 (택 1) */}
           {(canUseCoupon || canUseCredits || canUseUrlCoupon) && (
             <div className="mb-4 space-y-2">
               <p className="text-xs font-semibold text-foreground">💝 할인 혜택 (택 1)</p>
               
-              {/* 🌐 URL 쿠폰 옵션 */}
               {canUseUrlCoupon && (
                 <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'urlcoupon' ? 'ring-2 ring-primary' : ''}`}>
-                  <input
-                    type="radio"
-                    name="discount"
-                    checked={discountType === 'urlcoupon'}
-                    onChange={() => setDiscountType('urlcoupon')}
-                    className="accent-primary"
-                  />
+                  <input type="radio" name="discount" checked={discountType === 'urlcoupon'} onChange={() => setDiscountType('urlcoupon')} className="accent-primary" />
                   <div>
                     <p className="text-xs font-semibold text-foreground">
-                      💫 콕타로 귀빈 할인 - {URL_COUPON_DISCOUNT.toLocaleString()}원
+                      💫 콕타로 귀빈 할인 - {formatElla(URL_COUPON_DISCOUNT)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">자동 적용</p>
                   </div>
                 </label>
               )}
 
-              {/* site_settings 쿠폰 옵션 */}
               {canUseCoupon && (
                 <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'coupon' ? 'ring-2 ring-primary' : ''}`}>
-                  <input
-                    type="radio"
-                    name="discount"
-                    checked={discountType === 'coupon'}
-                    onChange={() => setDiscountType('coupon')}
-                    className="accent-primary"
-                  />
+                  <input type="radio" name="discount" checked={discountType === 'coupon'} onChange={() => setDiscountType('coupon')} className="accent-primary" />
                   <div>
                     <p className="text-xs font-semibold text-foreground">
-                      🎟️ 쿠폰 '{couponCode}' - {couponDiscount.toLocaleString()}원 할인
+                      🎟️ 쿠폰 '{couponCode}' - {formatElla(couponDiscount)} 할인
                     </p>
                     <p className="text-[10px] text-muted-foreground">자동 적용</p>
                   </div>
                 </label>
               )}
 
-              {/* 적립금 옵션 */}
               {canUseCredits && (
                 <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'credits' ? 'ring-2 ring-primary' : ''}`}>
-                  <input
-                    type="radio"
-                    name="discount"
-                    checked={discountType === 'credits'}
-                    onChange={() => setDiscountType('credits')}
-                    className="accent-primary"
-                  />
+                  <input type="radio" name="discount" checked={discountType === 'credits'} onChange={() => setDiscountType('credits')} className="accent-primary" />
                   <div>
                     <p className="text-xs font-semibold text-foreground">적립금 사용</p>
-                    <p className="text-[10px] text-muted-foreground">보유: {userCredits.toLocaleString()}원</p>
+                    <p className="text-[10px] text-muted-foreground">보유: {formatElla(userCredits)}</p>
                   </div>
                 </label>
               )}
 
-              {/* 할인 없음 */}
               <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'none' ? 'ring-2 ring-primary' : ''}`}>
-                <input
-                  type="radio"
-                  name="discount"
-                  checked={discountType === 'none'}
-                  onChange={() => setDiscountType('none')}
-                  className="accent-primary"
-                />
+                <input type="radio" name="discount" checked={discountType === 'none'} onChange={() => setDiscountType('none')} className="accent-primary" />
                 <p className="text-xs text-muted-foreground">할인 없이 결제</p>
               </label>
             </div>
@@ -276,7 +234,8 @@ export default function PaymentModal({
                 onClick={handleKakaoPay}
                 className="w-full py-3 rounded-2xl bg-[#FEE500] text-[#3C1E1E] font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
               >
-                카카오페이로 결제하기 ({finalPrice.toLocaleString()}원)
+                {/* ✨ 카카오페이도 엘라+원화 표시 */}
+                카카오페이로 결제하기 ({formatEllaWithWon(finalPrice)})
               </button>
               <button
                 onClick={() => setStep('bank')}
@@ -302,12 +261,13 @@ export default function PaymentModal({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">금액</span>
-                  <span className="font-bold text-primary">{finalPrice.toLocaleString()}원</span>
+                  {/* ✨ 무통장 입금도 엘라+원화 */}
+                  <span className="font-bold text-primary">{formatEllaWithWon(finalPrice)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-sm pt-2 border-t border-border">
                     <span className="text-green-500 font-semibold">할인 적용</span>
-                    <span className="text-green-500 font-semibold">-{discountAmount.toLocaleString()}원</span>
+                    <span className="text-green-500 font-semibold">-{formatElla(discountAmount)}</span>
                   </div>
                 )}
               </div>
