@@ -33,7 +33,7 @@ interface MenuWithPrice {
 }
 
 interface LandingPageProps {
-  onStartChat: (menuId?: number) => void;
+  onStartChat: (menuId?: number, counselorId?: string) => void; // ✨ counselorId 추가
   couponActive: boolean;
   userCredits: number;
   userName: string;
@@ -83,7 +83,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
       if (revs && revs.length > 0) {
         setReviews(revs as any);
       } else {
-        // 🌟 후기가 없으면 샘플 후기 표시
         const sampleReviews: Review[] = SAMPLE_REVIEWS.map((r, i) => ({
           id: `sample-${i}`,
           masked_name: r.masked_name,
@@ -98,7 +97,7 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     fetchData();
   }, []);
 
-  // ✨ 메뉴 + 가격 실시간 로드 (DB에서!)
+  // ✨ 메뉴 + 가격 실시간 로드
   useEffect(() => {
     const loadMenusWithPrices = async () => {
       const { data: products } = await supabase
@@ -108,7 +107,6 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         .order('sort_order');
 
       if (products) {
-        // MENUS와 products 합치기 (DB 가격으로 업데이트)
         const merged = MENUS.map(menu => {
           const product = products.find((p: any) => p.menu_id === menu.id);
           return {
@@ -119,21 +117,19 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
         });
         setMenusWithPrices(merged);
       } else {
-        // DB 없으면 기본 MENUS 사용
         setMenusWithPrices(MENUS.map(m => ({ ...m, price: m.price })));
       }
     };
 
     loadMenusWithPrices();
 
-    // ✨ 실시간 구독 (DB 변경 시 자동 업데이트)
     const channel = supabase
       .channel('products-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         () => {
-          loadMenusWithPrices(); // DB 변경되면 다시 로드
+          loadMenusWithPrices();
         }
       )
       .subscribe();
@@ -181,11 +177,12 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     }
   }, [config.popup_notice]);
 
+  // ✨ counselorId도 함께 넘김
   const handleStartConsult = (counselorId: string) => {
     const counselor = COUNSELORS.find(c => c.id === counselorId);
     if (counselor && counselor.menuIds.length > 0) {
       const menuId = counselor.menuIds[0];
-      onStartChat(menuId);
+      onStartChat(menuId, counselorId); // ✨ counselorId 추가
     }
   };
 
