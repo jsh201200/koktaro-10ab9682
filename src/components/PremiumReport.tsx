@@ -1,6 +1,11 @@
 import { motion } from 'framer-motion';
 import { Printer, X } from 'lucide-react';
-import { ChatMessage } from '@/hooks/useChat';
+
+interface ChatMessage {
+  id?: string;
+  role: 'bot' | 'user' | 'system';
+  content: string;
+}
 
 interface PremiumReportProps {
   counselorName: string;
@@ -22,7 +27,7 @@ export default function PremiumReport({
   };
 
   // 📄 채팅 메시지를 페이지별로 분할 (10페이지)
-  const totalMessages = chatMessages.filter(m => m.role === 'bot').length;
+  const totalMessages = chatMessages.filter(m => m.role !== 'system').length;
   const messagesPerPage = Math.ceil(totalMessages / 9); // 첫 페이지는 표지, 나머지 9페이지
   
   const getPageNumber = (messageIndex: number) => {
@@ -74,9 +79,9 @@ export default function PremiumReport({
       </motion.div>
 
       {/* 🖨️ Print 영역 (화면에서는 숨김, 인쇄할 때만 표시) */}
-      <div id="premium-report" className="hidden print:block w-full print:w-screen print:h-screen">
+      <div id="premium-report" className="hidden print:block w-full print:w-screen print:h-screen print:bg-white">
         {/* =============== PAGE 1: 표지 =============== */}
-        <div className="w-full h-screen bg-white p-12 flex flex-col justify-center items-center text-center break-after-page print:break-after-page">
+        <div className="w-full h-screen bg-white p-12 flex flex-col justify-center items-center text-center print:break-after-page">
           <div className="mb-8">
             <span className="text-6xl">✨</span>
           </div>
@@ -104,7 +109,7 @@ export default function PremiumReport({
 
         {/* =============== PAGE 2-10: 상담 내용 =============== */}
         {chatMessages
-          .filter(m => m.role === 'bot')
+          .filter(m => m.role !== 'system')
           .map((message, index) => {
             const pageNum = getPageNumber(index);
             const isNewPage = index > 0 && index % messagesPerPage === 0;
@@ -113,7 +118,7 @@ export default function PremiumReport({
               <div
                 key={message.id || index}
                 className={`w-full min-h-screen bg-white p-12 flex flex-col ${
-                  isNewPage ? 'break-before-page print:break-before-page' : ''
+                  isNewPage ? 'print:break-before-page' : ''
                 }`}
               >
                 {/* 페이지 헤더 */}
@@ -152,42 +157,3 @@ export default function PremiumReport({
     </motion.div>
   );
 }
-
-/* 
-  🖨️ Print CSS - styles.css 또는 전역 CSS에 추가:
-  
-  @media print {
-    * {
-      margin: 0;
-      padding: 0;
-      background: white !important;
-      color: black !important;
-    }
-    
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      line-height: 1.6;
-    }
-    
-    #premium-report {
-      display: block !important;
-      page-break-after: always;
-    }
-    
-    .break-after-page,
-    .print\:break-after-page {
-      page-break-after: always;
-    }
-    
-    .break-before-page,
-    .print\:break-before-page {
-      page-break-before: always;
-    }
-    
-    /* A4 페이지 크기 유지 */
-    @page {
-      size: A4;
-      margin: 0;
-    }
-  }
-*/
