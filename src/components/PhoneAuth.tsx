@@ -14,7 +14,9 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
   const [pin, setPin] = useState('');
   const [nickname, setNickname] = useState('');
   const [existingProfile, setExistingProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // ✨ 휴대폰 자동 포맷팅: 010-XXXX-XXXX
   const formatPhone = (val: string) => {
     const nums = val.replace(/\D/g, '').slice(0, 11);
     if (nums.length <= 3) return nums;
@@ -22,24 +24,43 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     return `${nums.slice(0, 3)}-${nums.slice(3, 7)}-${nums.slice(7)}`;
   };
 
+  // ✨ 휴대폰 형식 검증: 010으로 시작, 11자리
+  const isValidPhone = (val: string): boolean => {
+    const cleanPhone = val.replace(/-/g, '');
+    return cleanPhone.startsWith('010') && cleanPhone.length === 11;
+  };
+
   const handlePhoneSubmit = async () => {
     const cleanPhone = phone.replace(/-/g, '');
-    if (cleanPhone.length < 10) {
-      toast.error('전화번호를 정확히 입력해주세요');
+    
+    // ✨ 형식 검증
+    if (!isValidPhone(phone)) {
+      toast.error('010으로 시작하는 11자리 번호를 입력해주세요');
       return;
     }
 
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('phone', cleanPhone)
-      .single();
+    setIsLoading(true);
+    try {
+      // ✨ 중복 가입 방지: 유니크 키 확인
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .single();
 
-    if (data) {
-      setExistingProfile(data);
-      setStep('verify_pin');
-    } else {
+      if (data) {
+        // 이미 가입된 번호
+        setExistingProfile(data);
+        setStep('verify_pin');
+      } else {
+        // 새 가입
+        setStep('new_pin');
+      }
+    } catch (error) {
+      // 단일 결과 없음 (정상)
       setStep('new_pin');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -47,10 +68,8 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     if (!existingProfile) return;
     
     if (pin === existingProfile.pin) {
-      // Clear any cached session that doesn't belong to this user
       const cachedSessionId = localStorage.getItem('howl_session_id');
       if (cachedSessionId) {
-        // Verify cached session belongs to this profile
         const { data: sessionData } = await supabase
           .from('chat_sessions')
           .select('profile_id')
@@ -58,7 +77,6 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
           .single();
         
         if (!sessionData || sessionData.profile_id !== existingProfile.id) {
-          // Session doesn't belong to this user - clear it
           localStorage.removeItem('howl_session_id');
         }
       }
@@ -95,33 +113,57 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     }
 
     const cleanPhone = phone.replace(/-/g, '');
+    setIsLoading(true);
 
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .insert({
+    try {
+      // ✨ 중복 가입 방지: INSERT 전 최종 확인
+      const { data: existingData } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('phone', cleanPhone)
+        .single();
+
+      if (existingData) {
+        toast.error('이미 가입된 번호입니다. 로그인해주세요.');
+        setStep('phone');
+        return;
+      }
+
+      // ✨ 새 프로필 생성 (유니크 키 설정으로 중복 방지)
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .insert({
+          phone: cleanPhone,
+          pin,
+          nickname: nickname.trim(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          // 유니크 제약 위반
+          toast.error('이미 가입된 번호입니다');
+          setStep('phone');
+          return;
+        }
+        toast.error('프로필 생성에 실패했어요');
+        return;
+      }
+
+      localStorage.removeItem('howl_session_id');
+      localStorage.setItem('howl_profile_id', data.id);
+
+      onAuth({
+        id: data.id,
         phone: cleanPhone,
-        pin,
         nickname: nickname.trim(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      toast.error('프로필 생성에 실패했어요');
-      return;
+        credits: 0,
+      });
+      toast.success('프로필이 생성되었어요! ✨');
+    } finally {
+      setIsLoading(false);
     }
-
-    // Clear any old session cache for fresh start
-    localStorage.removeItem('howl_session_id');
-    localStorage.setItem('howl_profile_id', data.id);
-
-    onAuth({
-      id: data.id,
-      phone: cleanPhone,
-      nickname: nickname.trim(),
-      credits: 0,
-    });
-    toast.success('프로필이 생성되었어요! ✨');
   };
 
   return (
@@ -159,10 +201,10 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             />
             <button
               onClick={handlePhoneSubmit}
-              disabled={phone.replace(/-/g, '').length < 10}
+              disabled={!isValidPhone(phone) || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              다음
+              {isLoading ? '확인 중...' : '다음'}
             </button>
             <button
               onClick={onSkip}
@@ -239,10 +281,10 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             />
             <button
               onClick={handleCreateProfile}
-              disabled={!nickname.trim()}
+              disabled={!nickname.trim() || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              상담 시작하기 ✨
+              {isLoading ? '생성 중...' : '상담 시작하기 ✨'}
             </button>
           </div>
         )}
