@@ -9,13 +9,14 @@ interface PhoneAuthProps {
 }
 
 export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
-  const [step, setStep] = useState<'phone' | 'new_pin' | 'verify_pin' | 'nickname'>('phone');
+  const [step, setStep] = useState<'phone' | 'new_pin' | 'verify_pin' | 'nickname' | 'terms'>('phone');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [nickname, setNickname] = useState('');
   const [existingProfile, setExistingProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pinFailCount, setPinFailCount] = useState(0); // 🔐 PIN 실패 횟수 추적
+  const [termsAgreed, setTermsAgreed] = useState(false); // 📋 약관 동의
 
   // ✨ 휴대폰 자동 포맷팅: 010-XXXX-XXXX
   const formatPhone = (val: string) => {
@@ -201,16 +202,28 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
       localStorage.setItem('howl_last_auth_id', data.id);
       localStorage.setItem('howl_last_auth_time', Date.now().toString());
 
-      onAuth({
-        id: data.id,
-        phone: cleanPhone,
-        nickname: nickname.trim(),
-        credits: 0,
-      });
-      toast.success('프로필이 생성되었어요! ✨');
+      // 📋 약관 동의 후 완료
+      setStep('terms');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleTermsAgree = () => {
+    if (!termsAgreed) {
+      toast.error('약관에 동의해주세요');
+      return;
+    }
+
+    // ✅ 프로필 생성 완료
+    const cleanPhone = phone.replace(/-/g, '');
+    onAuth({
+      id: localStorage.getItem('howl_profile_id') || '',
+      phone: cleanPhone,
+      nickname: nickname.trim(),
+      credits: 0,
+    });
+    toast.success('프로필이 생성되었어요! ✨');
   };
 
   return (
@@ -233,6 +246,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             {step === 'verify_pin' && '비밀번호를 입력해주세요'}
             {step === 'new_pin' && '상담용 비밀번호 4자리를 설정해주세요'}
             {step === 'nickname' && '상담사가 부를 호칭을 알려주세요'}
+            {step === 'terms' && '약관에 동의해주세요'}
           </p>
         </div>
 
@@ -351,7 +365,55 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
               disabled={!nickname.trim() || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              {isLoading ? '생성 중...' : '상담 시작하기 ✨'}
+              {isLoading ? '생성 중...' : '다음'}
+            </button>
+          </div>
+        )}
+
+        {step === 'terms' && (
+          <div className="space-y-4">
+            <div className="glass rounded-2xl p-4 max-h-48 overflow-y-auto">
+              <p className="text-xs text-foreground leading-relaxed space-y-3">
+                <span className="block font-semibold mb-2">📋 이용약관 및 개인정보 처리방침</span>
+                
+                <span className="block">
+                  <span className="font-semibold">1. 서비스 이용</span><br/>
+                  본 서비스는 데이터 분석을 기반으로 한 에듀테인먼트 콘텐츠입니다. 상담 결과는 자기 탐색을 위한 참고 자료일 뿐, 법적 책임을 보장하지 않습니다.
+                </span>
+
+                <span className="block">
+                  <span className="font-semibold">2. 개인정보 수집</span><br/>
+                  전화번호, 호칭, 상담 내용 등을 수집하여 서비스 제공에 사용합니다.
+                </span>
+
+                <span className="block">
+                  <span className="font-semibold">3. 환불 및 취소</span><br/>
+                  결제 후 즉시 서비스 제공이 시작되며, 단순 변심으로 인한 환불은 불가합니다.
+                </span>
+
+                <span className="block">
+                  <span className="font-semibold">4. 책임 제한</span><br/>
+                  본 서비스 이용으로 인한 손해에 대해 당사는 법적 책임을 지지 않습니다.
+                </span>
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 p-3 rounded-xl glass cursor-pointer hover:bg-muted/40 transition-colors">
+              <input
+                type="checkbox"
+                checked={termsAgreed}
+                onChange={(e) => setTermsAgreed(e.target.checked)}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-foreground font-medium">위 약관에 모두 동의합니다</span>
+            </label>
+
+            <button
+              onClick={handleTermsAgree}
+              disabled={!termsAgreed || isLoading}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {isLoading ? '진행 중...' : '동의하고 시작하기'}
             </button>
           </div>
         )}
