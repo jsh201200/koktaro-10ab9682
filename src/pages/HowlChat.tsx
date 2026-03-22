@@ -35,6 +35,12 @@ interface UserProfile {
   gender?: string;
 }
 
+interface CouponData {
+  couponCode: string;
+  couponDiscount: number;
+  couponActive: boolean;
+}
+
 export default function HowlChat() {
   const {
     messages, session, isTyping, setIsTyping,
@@ -56,12 +62,14 @@ export default function HowlChat() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [couponData, setCouponData] = useState<CouponData>({
+    couponCode: '',
+    couponDiscount: 0,
+    couponActive: false,
+  });
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
-
-  const couponCode = searchParams.get('coupon');
-  const couponActive = !!couponCode;
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -69,6 +77,46 @@ export default function HowlChat() {
       if (data) setDbProducts(data);
     };
     loadProducts();
+  }, []);
+
+  // 🎟️ site_settings에서 쿠폰 데이터 fetch
+  useEffect(() => {
+    const fetchCoupon = async () => {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'coupon')
+        .single();
+
+      if (data && data.value) {
+        setCouponData(data.value as CouponData);
+      }
+    };
+
+    fetchCoupon();
+
+    // 실시간 구독 (쿠폰 변경되면 자동 반영)
+    const channel = supabase
+      .channel('coupon-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'site_settings',
+          filter: `key=eq.coupon`,
+        },
+        (payload) => {
+          if (payload.new && payload.new.value) {
+            setCouponData(payload.new.value as CouponData);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -91,53 +139,53 @@ export default function HowlChat() {
   }, []);
 
   // ✨ 아이스브레이킹: 시간별 센스있는 멘트
-const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
-  const hour = new Date().getHours();
-  
-  let timeGreeting = '';
-  if (hour >= 5 && hour < 9) {
-    timeGreeting = '새벽부터 고민이 깊으신가 봐요';
-  } else if (hour >= 9 && hour < 12) {
-    timeGreeting = '오전이 반짝반짝한 시간이네요';
-  } else if (hour >= 12 && hour < 18) {
-    timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
-  } else if (hour >= 18 && hour < 22) {
-    timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
-  } else {
-    timeGreeting = '밤은 진실이 드러나는 시간이에요';
-  }
+  const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
+    const hour = new Date().getHours();
 
-  // 도사별 톤 적용
-  const counselorTones: { [key: string]: string } = {
-    'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
-    'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
-    'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨`,
-    'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙`,
-    'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂`,
-    'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자! 🔥`,
-  };
+    let timeGreeting = '';
+    if (hour >= 5 && hour < 9) {
+      timeGreeting = '새벽부터 고민이 깊으신가 봐요';
+    } else if (hour >= 9 && hour < 12) {
+      timeGreeting = '오전이 반짝반짝한 시간이네요';
+    } else if (hour >= 12 && hour < 18) {
+      timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
+    } else if (hour >= 18 && hour < 22) {
+      timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
+    } else {
+      timeGreeting = '밤은 진실이 드러나는 시간이에요';
+    }
 
-  return counselorTones[counselorId] || timeGreeting;
-}, []);
+    // 도사별 톤 적용
+    const counselorTones: { [key: string]: string } = {
+      'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
+      'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
+      'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨`,
+      'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙`,
+      'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂`,
+      'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자! 🔥`,
+    };
 
-useEffect(() => {
-  if (view === 'chat' && !greetingSent.current && messages.length === 0) {
-    greetingSent.current = true;
-    const name = userProfile?.nickname || session.userName;
-    setTimeout(() => {
-      if (name && session.selectedMenu) {
-        const counselor = getCounselorForMenu(session.selectedMenu.id);
-        const icebreakerMsg = getIcebreakerMessage(counselor.id, name);
-        
-        addBotMessage(`${name}님 ✨\n\n${icebreakerMsg}\n\n오늘은 어떤 운명을 들어보고 싶으신가요?`);
-      } else if (name) {
-        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
-      } else {
-        addBotMessage(settings.welcomeMessage);
-      }
-    }, 500);
-  }
-}, [view, messages.length, session.selectedMenu, getIcebreakerMessage]);
+    return counselorTones[counselorId] || timeGreeting;
+  }, []);
+
+  useEffect(() => {
+    if (view === 'chat' && !greetingSent.current && messages.length === 0) {
+      greetingSent.current = true;
+      const name = userProfile?.nickname || session.userName;
+      setTimeout(() => {
+        if (name && session.selectedMenu) {
+          const counselor = getCounselorForMenu(session.selectedMenu.id);
+          const icebreakerMsg = getIcebreakerMessage(counselor.id, name);
+
+          addBotMessage(`${name}님 ✨\n\n${icebreakerMsg}\n\n오늘은 어떤 운명을 들어보고 싶으신가요?`);
+        } else if (name) {
+          addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+        } else {
+          addBotMessage(settings.welcomeMessage);
+        }
+      }, 500);
+    }
+  }, [view, messages.length, session.selectedMenu, getIcebreakerMessage, settings.welcomeMessage]);
 
   useEffect(() => {
     if (session.sessionExpiry && session.isPaid) {
@@ -243,8 +291,8 @@ useEffect(() => {
 
   // ✨ 크로스셀링 함수
   const handleCrossSelling = useCallback(() => {
-    const currentCounselor = session.selectedMenu 
-      ? getCounselorForMenu(session.selectedMenu.id) 
+    const currentCounselor = session.selectedMenu
+      ? getCounselorForMenu(session.selectedMenu.id)
       : null;
 
     const recommendations: { [key: string]: { name: string; specialty: string } } = {
@@ -271,13 +319,13 @@ useEffect(() => {
   // ✨ 1,000원 상품(한 뼘 운세) 스낵 포맷 처리
   const handleSnackConsultation = useCallback(async (menu: Menu) => {
     const counselor = getCounselorForMenu(menu.id);
-    
+
     addSystemMessage(`${menu.icon} ${counselor.name}의 ${menu.name} 상담을 시작합니다`);
-    
+
     setIsTyping(true);
     await delayedTyping();
     setIsTyping(false);
-    
+
     const name = session.userName || userProfile?.nickname || '';
     addBotMessage(
       `${name}${name ? '님, ' : ''}오늘의 기운을 읽어볼게요! 🔮\n\n` +
@@ -289,13 +337,13 @@ useEffect(() => {
       setIsTyping(true);
       await delayedTyping();
       setIsTyping(false);
-      
+
       addBotMessage(
         `✨ 럭키 컬러: 파란색\n` +
         `🍽️ 추천 음식: 흰쌀밥\n` +
         `🪬 오늘의 부적: 대나무`
       );
-      
+
       // 2초 후 종료
       setTimeout(() => {
         addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
@@ -313,12 +361,12 @@ useEffect(() => {
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
-        
+
         // ✨ 크로스셀링 로직
         setTimeout(() => {
           handleCrossSelling();
         }, 1500);
-        
+
         updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
         setSessionTime(null);
         setShowReview(true);
@@ -418,7 +466,7 @@ useEffect(() => {
 
     addSystemMessage(`${actualMenu.icon} ${counselor.name}의 ${actualMenu.name} 상담을 시작합니다`);
 
-    MENU_WELCOME_GUIDE
+    MENU_WELCOME_GUIDES;
   };
 
   const handleScanComplete = async () => {
@@ -439,12 +487,12 @@ useEffect(() => {
 
   const handleExitChat = async (deleteChat: boolean) => {
     setShowExitModal(false);
-    
+
     if (deleteChat) {
       await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
       addSystemMessage("대화 내용이 삭제되었습니다.");
     }
-    
+
     resetSession();
     setView('landing');
     toast.info("상담을 종료했습니다 ✨");
@@ -459,10 +507,11 @@ useEffect(() => {
     let discountType = '';
     let finalPrice = dbPrice;
 
-    if (couponActive && dbPrice >= 9900) {
-      discountAmount = 3000;
-      discountType = 'howland_coupon';
-      finalPrice = dbPrice - 3000;
+    // 🎟️ site_settings의 쿠폰 자동 적용
+    if (couponData.couponActive && couponData.couponCode && dbPrice >= 9900) {
+      discountAmount = couponData.couponDiscount;
+      discountType = 'site_coupon';
+      finalPrice = Math.max(0, dbPrice - discountAmount);
     }
 
     const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
@@ -573,7 +622,7 @@ useEffect(() => {
       <>
         <LandingPage
           onStartChat={handleStartChat}
-          couponActive={couponActive}
+          couponActive={couponData.couponActive && !!couponData.couponCode}
           userCredits={userProfile?.credits || 0}
           userName={userProfile?.nickname || ''}
           onCheckCredits={() => {
@@ -674,8 +723,8 @@ useEffect(() => {
         disabled={isTyping || timerExpired}
         placeholder={
           timerExpired ? '상담 시간이 종료되었습니다'
-          : !session.userName && !userProfile?.nickname ? '호칭을 입력해줘...'
-          : '메시지 보내기...'
+            : !session.userName && !userProfile?.nickname ? '호칭을 입력해줘...'
+              : '메시지 보내기...'
         }
       />
 
@@ -710,7 +759,9 @@ useEffect(() => {
           userName={session.userName || userProfile?.nickname || ''}
           onClose={() => setShowPayment(false)}
           onPaymentSubmit={handlePaymentSubmit}
-          couponActive={couponActive}
+          couponActive={couponData.couponActive && !!couponData.couponCode}
+          couponCode={couponData.couponCode}
+          couponDiscount={couponData.couponDiscount}
           userCredits={userProfile?.credits || 0}
         />
       )}
