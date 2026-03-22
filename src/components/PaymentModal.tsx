@@ -4,6 +4,8 @@ import { Menu } from '@/data/menus';
 import { X } from 'lucide-react';
 import { loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface PaymentModalProps {
   menu: Menu;
@@ -33,9 +35,15 @@ export default function PaymentModal({
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
-  const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits'>('none');
+  const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits' | 'urlcoupon'>('none');
   const [menuWithPrice, setMenuWithPrice] = useState<MenuWithPrice>(menu as MenuWithPrice);
   const s = loadSettings();
+  const [searchParams] = useSearchParams();
+
+  // 🌐 URL 파라미터에서 쿠폰 감지 (?coupon=KOKK3000)
+  const urlCoupon = searchParams.get('coupon');
+  const hasUrlCoupon = urlCoupon === 'KOKK3000' || urlCoupon === 'HOWL3000';
+  const URL_COUPON_DISCOUNT = 3000; // 3,000원 할인
 
   // ✨ DB에서 실시간 가격 fetch
   useEffect(() => {
@@ -82,16 +90,25 @@ export default function PaymentModal({
   // 🎟️ 쿠폰 사용 가능 여부 (9,900원 이상만)
   const canUseCoupon = couponActive && couponCode && menuWithPrice.price >= 9900;
   const canUseCredits = userCredits > 0 && menuWithPrice.price >= 9900;
+  const canUseUrlCoupon = hasUrlCoupon && menuWithPrice.price >= 9900;
 
   let finalPrice = menuWithPrice.price;
   let discountAmount = 0;
+  let discountLabel = '';
 
+  // 🔐 중복 방지: 하나만 선택 가능
   if (discountType === 'coupon' && canUseCoupon) {
     discountAmount = couponDiscount;
     finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
+    discountLabel = `쿠폰 '${couponCode}' ${discountAmount.toLocaleString()}원 할인`;
   } else if (discountType === 'credits' && canUseCredits) {
     discountAmount = Math.min(userCredits, menuWithPrice.price);
     finalPrice = menuWithPrice.price - discountAmount;
+    discountLabel = `적립금 ${discountAmount.toLocaleString()}원 사용`;
+  } else if (discountType === 'urlcoupon' && canUseUrlCoupon) {
+    discountAmount = URL_COUPON_DISCOUNT;
+    finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
+    discountLabel = `콕타로 귀빈 ${discountAmount.toLocaleString()}원 할인`;
   }
 
   const handleKakaoPay = () => {
@@ -125,8 +142,17 @@ export default function PaymentModal({
             <span className="text-3xl mb-2 block">{menuWithPrice.icon}</span>
             <h3 className="font-display text-lg font-bold text-foreground">{menuWithPrice.name}</h3>
             
-            {/* 🎟️ 쿠폰 배너 */}
-            {canUseCoupon && (
+            {/* 🌐 URL 쿠폰 배너 */}
+            {canUseUrlCoupon && (
+              <div className="mt-2 px-2 py-1 rounded-lg bg-gradient-to-r from-primary/20 to-pink-500/20 border border-primary/30">
+                <p className="text-xs text-primary font-semibold">
+                  💫 콕타로 귀빈 3,000원 할인 중!
+                </p>
+              </div>
+            )}
+
+            {/* 🎟️ site_settings 쿠폰 배너 */}
+            {canUseCoupon && !canUseUrlCoupon && (
               <div className="mt-2 px-2 py-1 rounded-lg bg-primary/20 border border-primary/30">
                 <p className="text-xs text-primary font-semibold">
                   🎟️ 쿠폰 '{couponCode}' 사용 가능!
@@ -144,16 +170,36 @@ export default function PaymentModal({
             {/* 할인 정보 표시 */}
             {discountAmount > 0 && (
               <p className="text-xs text-green-500 mt-1">
-                ✅ {discountAmount.toLocaleString()}원 할인 적용됨
+                ✅ {discountLabel}
               </p>
             )}
           </div>
 
-          {/* Discount options */}
-          {(canUseCoupon || canUseCredits) && (
+          {/* Discount options - 중복 방지 (택 1) */}
+          {(canUseCoupon || canUseCredits || canUseUrlCoupon) && (
             <div className="mb-4 space-y-2">
               <p className="text-xs font-semibold text-foreground">💝 할인 혜택 (택 1)</p>
               
+              {/* 🌐 URL 쿠폰 옵션 */}
+              {canUseUrlCoupon && (
+                <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'urlcoupon' ? 'ring-2 ring-primary' : ''}`}>
+                  <input
+                    type="radio"
+                    name="discount"
+                    checked={discountType === 'urlcoupon'}
+                    onChange={() => setDiscountType('urlcoupon')}
+                    className="accent-primary"
+                  />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">
+                      💫 콕타로 귀빈 할인 - {URL_COUPON_DISCOUNT.toLocaleString()}원
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">자동 적용</p>
+                  </div>
+                </label>
+              )}
+
+              {/* site_settings 쿠폰 옵션 */}
               {canUseCoupon && (
                 <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'coupon' ? 'ring-2 ring-primary' : ''}`}>
                   <input
@@ -172,6 +218,7 @@ export default function PaymentModal({
                 </label>
               )}
 
+              {/* 적립금 옵션 */}
               {canUseCredits && (
                 <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'credits' ? 'ring-2 ring-primary' : ''}`}>
                   <input
@@ -188,6 +235,7 @@ export default function PaymentModal({
                 </label>
               )}
 
+              {/* 할인 없음 */}
               <label className={`flex items-center gap-2 p-2.5 rounded-xl glass cursor-pointer transition-all ${discountType === 'none' ? 'ring-2 ring-primary' : ''}`}>
                 <input
                   type="radio"
