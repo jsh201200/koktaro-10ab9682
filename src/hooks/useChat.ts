@@ -22,6 +22,7 @@ export interface SessionState {
   paymentPending: boolean;
   imageFailCount: number;
   dbSessionId: string | null;
+  roomId?: string; // ✨ room_id 추가
 }
 
 const INITIAL_SESSION: SessionState = {
@@ -35,6 +36,7 @@ const INITIAL_SESSION: SessionState = {
   paymentPending: false,
   imageFailCount: 0,
   dbSessionId: null,
+  roomId: undefined, // ✨ 초기값
 };
 
 export function useChat() {
@@ -51,7 +53,6 @@ export function useChat() {
   // Create DB session on first load
   useEffect(() => {
     const initSession = async () => {
-      // Check localStorage for existing session
       const existingId = localStorage.getItem('howl_session_id');
       if (existingId) {
         const { data } = await supabase.from('chat_sessions').select('*').eq('id', existingId).single();
@@ -61,13 +62,18 @@ export function useChat() {
             dbSessionId: data.id,
             userName: data.user_nickname || '',
             isPaid: data.is_paid || false,
+            roomId: data.room_id || undefined, // ✨ DB에서 room_id 로드
           }));
-          // Load chat history
+          
+          // ✨ room_id별로 메시지 필터링해서 로드
+          const roomId = data.room_id;
           const { data: history } = await supabase
-            .from('chat_history')
+            .from('messages')
             .select('*')
             .eq('session_id', data.id)
+            .eq('room_id', roomId || null) // room_id로 필터링
             .order('created_at', { ascending: true });
+          
           if (history && history.length > 0) {
             const msgs: ChatMessage[] = history.map(h => ({
               id: h.id,
@@ -81,6 +87,7 @@ export function useChat() {
           return;
         }
       }
+      
       // Create new session
       const { data: newSession } = await supabase
         .from('chat_sessions')
@@ -90,13 +97,13 @@ export function useChat() {
         })
         .select()
         .single();
+      
       if (newSession) {
         localStorage.setItem('howl_session_id', newSession.id);
         setSession(prev => ({ ...prev, dbSessionId: newSession.id }));
       }
     };
 
-    // Record page visit
     const recordVisit = async () => {
       const sessionId = localStorage.getItem('howl_session_id');
       await supabase.from('page_visits').insert({
@@ -112,13 +119,16 @@ export function useChat() {
 
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
     if (!session.dbSessionId) return;
-    await supabase.from('chat_history').insert({
+    
+    // ✨ room_id와 함께 저장
+    await supabase.from('messages').insert({
       session_id: session.dbSessionId,
+      room_id: session.roomId || null, // room_id 포함
       role,
       content,
       image_url: imageUrl || null,
     });
-  }, [session.dbSessionId]);
+  }, [session.dbSessionId, session.roomId]); // ✨ roomId 의존성 추가
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, image?: string) => {
     const msg: ChatMessage = { id: genId(), role, content, timestamp: Date.now(), image, isNew: role === 'bot' };
@@ -150,12 +160,14 @@ export function useChat() {
   const updateSession = useCallback((updates: Partial<SessionState>) => {
     setSession(prev => {
       const next = { ...prev, ...updates };
-      // Sync key fields to DB
-      if (next.dbSessionId && (updates.userName !== undefined || updates.isPaid !== undefined || updates.selectedMenu !== undefined)) {
+      
+      // ✨ room_id도 DB에 저장
+      if (next.dbSessionId && (updates.userName !== undefined || updates.isPaid !== undefined || updates.selectedMenu !== undefined || updates.roomId !== undefined)) {
         supabase.from('chat_sessions').update({
           user_nickname: next.userName || null,
           is_paid: next.isPaid,
           selected_menu_id: next.selectedMenu?.id ?? null,
+          room_id: next.roomId || null, // ✨ room_id 저장
         }).eq('id', next.dbSessionId).then(() => {});
       }
       return next;
