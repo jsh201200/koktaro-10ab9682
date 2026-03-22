@@ -242,18 +242,35 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    if (!session.userName && !userProfile?.nickname) {
-      const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
-      if (name) {
-        updateSession({ userName: name });
-        setIsTyping(true);
-        await delayedTyping();
-        setIsTyping(false);
-        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
-        return;
-      }
-      addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
-      return;
+    // ✨ 결제 고객 기억력: 결제 상태 확인
+if (session.isPaid) {
+  // 결제 완료자 - 이름 묻지 않고 바로 상담 진행
+  const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
+  await handleBotResponse(
+    text,
+    session.selectedMenu?.name,
+    session.isPaid,
+    undefined,
+    counselor?.id,
+    session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
+  );
+  return;
+}
+
+// 미결제자 - 이름 묻기
+if (!session.userName && !userProfile?.nickname) {
+  const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
+  if (name) {
+    updateSession({ userName: name });
+    setIsTyping(true);
+    await delayedTyping();
+    setIsTyping(false);
+    addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+    return;
+  }
+  addBotMessage('호칭을 한번 더 알려줄래? 한글이나 영어로 입력해줘! ✨');
+  return;
+}
     }
 
     if (timerExpired) {
