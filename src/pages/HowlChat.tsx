@@ -259,7 +259,7 @@ export default function HowlChat() {
       }, 1000);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [session.sessionExpiry, session.isPaid]);
+  }, [session.sessionExpiry, session.isPaid, addSystemMessage]);
 
   useEffect(() => {
     if (!session.dbSessionId) return;
@@ -770,6 +770,7 @@ export default function HowlChat() {
           seconds={sessionTime || 0}
           expired={timerExpired}
           onExtend={() => setShowPayment(true)}
+          isAlert={sessionTime !== null && sessionTime <= 300}
         />
       )}
 
