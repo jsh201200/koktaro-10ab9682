@@ -4,7 +4,7 @@ import { ArrowLeft, X } from 'lucide-react';
 interface ChatHeaderProps {
   sessionTime: number | null;
   counselorName?: string;
-  counselorImage?: string;
+  counselorImage?: any; // import된 이미지 객체를 받을 수 있도록 수정
   onBack?: () => void;
   onExit?: () => void;
 }
@@ -14,6 +14,29 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // 이미지 소스를 안전하게 처리
+  const getImageSrc = () => {
+    if (!counselorImage) return howlProfile;
+    
+    // string 경로
+    if (typeof counselorImage === 'string') {
+      return counselorImage;
+    }
+    
+    // import된 이미지 객체
+    if (counselorImage.default) {
+      return counselorImage.default;
+    }
+    
+    // 기타 이미지 객체
+    if (counselorImage.src) {
+      return counselorImage.src;
+    }
+    
+    // fallback
+    return howlProfile;
   };
 
   return (
@@ -26,7 +49,15 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
             </button>
           )}
           <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg ring-1 ring-primary/20">
-            <img src={counselorImage || howlProfile} alt="상담사" className="w-full h-full object-cover" />
+            <img 
+              src={getImageSrc()} 
+              alt="상담사" 
+              className="w-full h-full object-cover" 
+              onError={(e) => {
+                // 이미지 로드 실패 시 fallback
+                (e.target as HTMLImageElement).src = howlProfile;
+              }}
+            />
           </div>
           <div>
             <h1 className="font-display text-lg font-bold tracking-tight text-foreground">
@@ -37,7 +68,6 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
             </p>
           </div>
         </div>
-
         <div className="flex items-center gap-3">
           {sessionTime !== null && sessionTime > 0 && (
             <div className="text-xs font-mono glass-strong px-3 py-1.5 rounded-full text-primary font-semibold">
