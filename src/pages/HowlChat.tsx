@@ -70,6 +70,58 @@ export default function HowlChat() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
+  const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
+
+  // 🔐 세션 검증 및 초기화
+  useEffect(() => {
+    const validateSession = async () => {
+      const storedSessionId = localStorage.getItem('howl_session_id');
+      const storedProfileId = localStorage.getItem('howl_profile_id');
+      const lastAuthId = localStorage.getItem('howl_last_auth_id');
+      
+      // 세션이 없으면 새 세션 생성
+      if (!storedSessionId) {
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        return;
+      }
+
+      // 프로필 ID가 변경되었거나 다른 사용자면 새 세션 생성
+      if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
+        console.warn('⚠️ 세션 사용자 변경 감지 - 새 세션 생성');
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        localStorage.removeItem('howl_profile_id');
+        localStorage.removeItem('howl_last_auth_id');
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        setUserProfile(null);
+        setView('landing');
+        toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
+        return;
+      }
+
+      // 저장된 프로필 로드
+      if (storedProfileId) {
+        const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
+        if (data) {
+          setUserProfile({
+            id: data.id,
+            phone: data.phone,
+            nickname: data.nickname || '',
+            credits: data.credits || 0,
+            birth_date: data.birth_date || undefined,
+            birth_time: data.birth_time || undefined,
+            gender: data.gender || undefined,
+          });
+        }
+      }
+    };
+
+    validateSession();
+  }, []);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -502,8 +554,16 @@ export default function HowlChat() {
       addSystemMessage("대화 내용이 삭제되었습니다.");
     }
 
+    // 🔐 세션 완전 초기화
+    localStorage.removeItem('howl_session_id');
+    localStorage.removeItem('howl_profile_id');
+    const newSessionId = `session_${Date.now()}_${Math.random()}`;
+    localStorage.setItem('howl_session_id', newSessionId);
+    sessionIdRef.current = newSessionId;
+
     resetSession();
     setView('landing');
+    setUserProfile(null);
     toast.info("상담을 종료했습니다 ✨");
   };
 
@@ -603,6 +663,11 @@ export default function HowlChat() {
   const handleAuthComplete = (profile: UserProfile) => {
     setUserProfile(profile);
     localStorage.setItem('howl_profile_id', profile.id);
+    
+    // 🔐 현재 세션ID와 함께 저장 (나중에 세션 검증에 사용)
+    localStorage.setItem('howl_last_auth_id', profile.id);
+    localStorage.setItem('howl_last_auth_time', Date.now().toString());
+    
     updateSession({ userName: profile.nickname });
 
     if (session.dbSessionId) {
