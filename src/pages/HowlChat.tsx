@@ -482,11 +482,11 @@ export default function HowlChat() {
             }
           }}
         />
-       <button
-  onClick={() => navigate('/admin')}
-  className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
-  title="관리자 대시보드"
->
+        <button
+          onClick={() => navigate('/admin')}
+          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+          title="관리자 대시보드"
+        >
           <Settings className="w-4 h-4 text-muted-foreground" />
         </button>
       </>
@@ -666,9 +666,9 @@ export default function HowlChat() {
       )}
 
       <button
-        onClick={() => navigate('/admin/settings')}
+        onClick={() => navigate('/admin')}
         className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
-        title="관리자 설정"
+        title="관리자 대시보드"
       >
         <Settings className="w-4 h-4 text-muted-foreground" />
       </button>
