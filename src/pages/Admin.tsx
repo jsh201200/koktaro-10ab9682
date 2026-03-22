@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { RefreshCw, Trash2, Edit2, Star, X } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Star, X, Settings } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -51,9 +52,10 @@ interface UserProfile {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reviews' | 'users' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reviews' | 'users'>('dashboard');
   
   // Dashboard
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -75,9 +77,6 @@ export default function AdminDashboard() {
   // Users
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchUser, setSearchUser] = useState('');
-
-  // Settings
-  const [products, setProducts] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
 
@@ -110,7 +109,6 @@ export default function AdminDashboard() {
     const monthAgo = new Date(today);
     monthAgo.setMonth(monthAgo.getMonth() - 1);
 
-    // 수익 통계
     const { data: todayData } = await supabase
       .from('payments')
       .select('final_price, price')
@@ -133,7 +131,6 @@ export default function AdminDashboard() {
     const weekRevenue = weekData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
     const monthRevenue = monthData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
 
-    // 리뷰 통계
     const { data: allReviews } = await supabase
       .from('reviews')
       .select('*');
@@ -168,21 +165,11 @@ export default function AdminDashboard() {
     if (data) setUsers(data);
   };
 
-  // ✨ 상품 로드
-  const fetchProducts = async () => {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .order('sort_order');
-    if (data) setProducts(data);
-  };
-
   useEffect(() => {
     if (isAuthorized) {
       fetchPayments();
       fetchReviews();
       fetchUsers();
-      fetchProducts();
     }
   }, [isAuthorized]);
 
@@ -236,7 +223,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✨ 후기 승인/거절
+  // ✨ 후기 승인
   const handleApproveReview = async (reviewId: string) => {
     const { error } = await supabase
       .from('reviews')
@@ -347,18 +334,18 @@ export default function AdminDashboard() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> 새로고침
             </button>
-            
-              href="/"
+            <button
+              onClick={() => navigate('/')}
               className="glass rounded-2xl px-4 py-2 text-sm font-medium text-primary hover:bg-white/60 transition-colors"
             >
               상담소로
-            </a>
+            </button>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-white/10">
-          {['dashboard', 'reviews', 'users', 'settings'].map(tab => (
+          {['dashboard', 'reviews', 'users'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -371,7 +358,6 @@ export default function AdminDashboard() {
               {tab === 'dashboard' && '📊 대시보드'}
               {tab === 'reviews' && '⭐ 후기'}
               {tab === 'users' && '👥 사용자'}
-              {tab === 'settings' && '⚙️ 설정'}
             </button>
           ))}
         </div>
@@ -473,7 +459,6 @@ export default function AdminDashboard() {
         {/* Reviews Tab */}
         {activeTab === 'reviews' && (
           <div>
-            {/* Pending Reviews */}
             {pendingReviews.length > 0 && (
               <div className="mb-8">
                 <h3 className="text-sm font-bold text-primary tracking-wider uppercase mb-4">
@@ -527,7 +512,6 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* Approved Reviews */}
             {reviews.filter(r => r.is_approved).length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-muted-foreground tracking-wider uppercase mb-4">
@@ -644,25 +628,16 @@ export default function AdminDashboard() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Settings Button */}
+        <button
+          onClick={() => navigate('/admin/settings')}
+          className="fixed bottom-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
+          title="상세 설정"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </button>
       </div>
     </div>
   );
 }
-<button
-  onClick={() => navigate('/admin/settings')}
-  className="fixed bottom-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors opacity-20 hover:opacity-100"
-  title="상세 설정"
->
-  <Settings className="w-4 h-4 text-muted-foreground" />
-</button>
-```
-
----
-
-## **정리:**
-```
-메인 화면 [⚙️] → /admin (대시보드)
-  ↓
-대시보드에서 [⚙️] → /admin/settings (상세 설정)
-  ↓
-설정에서 [←] → / (홈)
