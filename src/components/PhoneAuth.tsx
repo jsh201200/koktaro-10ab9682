@@ -188,6 +188,11 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         return;
       }
 
+      // ✨ NEW: 새 세션 생성 (기존 세션 초기화)
+      localStorage.removeItem('howl_session_id');
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+
       const { data, error } = await supabase
         .from('user_profiles')
         .insert({
@@ -208,10 +213,6 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
         return;
       }
 
-      localStorage.removeItem('howl_session_id');
-      const newSessionId = `session_${Date.now()}_${Math.random()}`;
-      localStorage.setItem('howl_session_id', newSessionId);
-      
       localStorage.setItem('howl_profile_id', data.id);
       localStorage.setItem('howl_last_auth_id', data.id);
       localStorage.setItem('howl_last_auth_time', Date.now().toString());
