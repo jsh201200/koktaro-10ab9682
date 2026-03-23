@@ -307,7 +307,8 @@ export default function HowlChat() {
       addSystemMessage("💜 결제가 승인되었습니다!");
       toast.success("입금 확인 완료! ✨");
 
-      const name = session.userName || userProfile?.nickname || '';
+      // text가 있을 때만 trim과 replace를 실행하도록 수정
+    const name = text?.trim() ? text.trim().replace(/[^\uac00-\ud7a3a-zA-Z0-9\s]/g, '').trim() : '';
       
       setTimeout(() => {
         addBotMessage(
