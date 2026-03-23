@@ -1,5 +1,4 @@
-const CHAT_URL = `$https://ktpnfhezbaaiwzxlwgqi.supabase.co/functions/v1/smart-responder}/functions/v1/howl-chat`;
-
+const CHAT_URL = `https://ktpnfhezbaaiwzxlwgqi.supabase.co/functions/v1/smart-responder`;
 interface ChatHistoryMessage {
   role: 'bot' | 'user';
   content: string;
