@@ -10,7 +10,7 @@ export interface SiteConfig {
 }
 
 const DEFAULTS: SiteConfig = {
-  banner_text: '💫 콕타로에 오신 당신! 9,900원 이상 결제 시 3,000원 자동 할인 중',
+  banner_text: '💫 콕타로에 오신 당신! 환영합니다.',
   popup_notice: '',
   footer_business_info: '본 서비스는 데이터 분석을 기반으로 한 인사이트 에듀테인먼트 콘텐츠이며, 상담 결과는 자기 탐색을 위한 참고 자료일 뿐 법적 책임을 보장하지 않습니다.',
   hero_title: '콕타로',
