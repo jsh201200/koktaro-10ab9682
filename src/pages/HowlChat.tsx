@@ -14,6 +14,7 @@ import ConsultTimer from '@/components/ConsultTimer';
 import ReviewModal from '@/components/ReviewModal';
 import PremiumReport from '@/components/PremiumReport';
 import ScanAnimation from '@/components/ScanAnimation';
+import TimeSelectionModal from '@/components/TimeSelectionModal';
 import { useChat } from '@/hooks/useChat';
 import { Menu, MENU_WELCOME_GUIDES, MENUS } from '@/data/menus';
 import { COUNSELORS, getCounselorForMenu } from '@/data/counselors';
@@ -43,6 +44,17 @@ interface CouponData {
   couponActive: boolean;
 }
 
+interface DbProduct {
+  id: string;
+  menu_id: number;
+  name: string;
+  icon: string;
+  price: number;
+  duration_minutes: number;
+  enabled: boolean;
+  sort_order: number;
+}
+
 export default function HowlChat() {
   const {
     messages, session, isTyping, setIsTyping,
@@ -63,13 +75,18 @@ export default function HowlChat() {
   const [sessionTime, setSessionTime] = useState<number | null>(null);
   const [timerExpired, setTimerExpired] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [dbProducts, setDbProducts] = useState<DbProduct[]>([]);
   const [showExitModal, setShowExitModal] = useState(false);
   const [couponData, setCouponData] = useState<CouponData>({
     couponCode: '',
     couponDiscount: 0,
     couponActive: false,
   });
+  
+  // 🆕 시간 선택 모달
+  const [showTimeSelection, setShowTimeSelection] = useState(false);
+  const [selectedMenuForTime, setSelectedMenuForTime] = useState<DbProduct | null>(null);
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
@@ -475,14 +492,58 @@ export default function HowlChat() {
     }
   };
 
+  // 🆕 메뉴 선택 → 시간 선택 또는 바로 결제
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
+    // 같은 이름의 메뉴들 찾기
+    const baseName = menu.name.split(' - ')[0].trim();
+    const relatedProducts = dbProducts.filter(p => {
+      const pBaseName = p.name.split(' - ')[0].trim();
+      return pBaseName === baseName && p.enabled;
+    });
+
+    // 시간 선택 옵션이 여러 개면 모달 띄우기
+    if (relatedProducts.length > 1) {
+      const product = dbProducts.find(p => p.menu_id === menu.id);
+      if (product) {
+        setSelectedMenuForTime(product);
+        setShowTimeSelection(true);
+      }
+      return;
+    }
+
+    // 시간 선택 옵션이 1개면 바로 진행
+    proceedWithMenu(menu);
+  };
+
+  // 🆕 시간 선택 후
+  const handleTimeSelect = (product: DbProduct) => {
+    setShowTimeSelection(false);
+    setSelectedMenuForTime(null);
+
+    // product 정보로 Menu 객체 만들기
+    const menu: Menu = {
+      id: product.menu_id,
+      name: product.name,
+      icon: product.icon,
+      price: product.price,
+      category: 'menu',
+      categoryName: 'Menu',
+    };
+
+    proceedWithMenu(menu, product.price, product.duration_minutes);
+  };
+
+  // 🆕 실제 메뉴 선택 처리
+  const proceedWithMenu = (menu: Menu, price?: number, duration?: number) => {
     const counselor = getCounselorForMenu(menu.id);
     const roomId = `room_${counselor.id}_${Date.now()}`;
 
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
-    const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
+    const actualMenu = dbProduct 
+      ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
+      : { ...menu, price: price || menu.price };
 
     updateSession({
       selectedMenu: actualMenu,
@@ -510,7 +571,7 @@ export default function HowlChat() {
     }
 
     if (loadSettings().testMode) {
-      activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
+      activatePaidMode(duration || 30, menu.id, actualMenu.name, actualMenu.price);
       addSystemMessage('🤖 테스트 모드: 결제 없이 상담 시작');
       setTimeout(() => {
         const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
@@ -905,6 +966,19 @@ export default function HowlChat() {
           <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} counselorId={currentCounselor?.id} />
         )}
       </AnimatePresence>
+
+      {/* 🆕 시간 선택 모달 */}
+      {showTimeSelection && selectedMenuForTime && (
+        <TimeSelectionModal
+          selectedMenu={selectedMenuForTime}
+          allProducts={dbProducts}
+          onSelect={handleTimeSelect}
+          onClose={() => {
+            setShowTimeSelection(false);
+            setSelectedMenuForTime(null);
+          }}
+        />
+      )}
 
       {showPayment && session.selectedMenu && (
         <PaymentModal
