@@ -4,6 +4,7 @@ interface ConsultTimerProps {
   seconds: number;
   onExtend: () => void;
   expired: boolean;
+  isAlert?: boolean;
 }
 
 export default function ConsultTimer({ seconds, onExtend, expired }: ConsultTimerProps) {
