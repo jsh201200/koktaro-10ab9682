@@ -13,8 +13,7 @@ interface PaymentAlert {
 
 export async function sendDiscordAlert(data: PaymentAlert) {
   try {
-    await supabase.functions.invoke('discord-alert', {
-      body: data,
+await supabase.functions.invoke('super-worker', {      body: data,
     });
   } catch (e) {
     console.error('Discord alert error:', e);
