@@ -558,18 +558,75 @@ export default function HowlChat() {
     toast.info("상담을 종료했습니다 ✨");
   };
 
-  const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
+  const handlePaymentSubmit = async (
+    method: 'kakaopay' | 'bank',
+    depositor: string,
+    phoneTail: string,
+    discountType: string,
+    couponId?: number
+  ) => {
     const menu = session.selectedMenu!;
     setShowPayment(false);
 
     const dbPrice = getDbPrice(menu.id);
     let discountAmount = 0;
-    let discountType = '';
+    let appliedDiscountType = 'none';
     let finalPrice = dbPrice;
 
-    if (couponData.couponActive && couponData.couponCode && dbPrice >= 9900) {
+    // 쿠폰 할인 (DB 쿠폰)
+    if (discountType === 'dbcoupon' && couponId) {
+      const selectedCoupon = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('id', couponId)
+        .single();
+
+      if (selectedCoupon.data) {
+        const coupon = selectedCoupon.data;
+        discountAmount = coupon.discount_amount;
+        appliedDiscountType = 'db_coupon';
+        finalPrice = Math.max(0, dbPrice - discountAmount);
+
+        // 🎟️ 쿠폰 사용 내역 기록
+        await supabase.from('coupon_usage').insert({
+          coupon_id: couponId,
+          user_id: userProfile?.id || 'anonymous',
+          user_phone: userProfile?.phone || phoneTail,
+          discount_amount: discountAmount,
+        });
+
+        // 📊 쿠폰 사용 갯수 증가
+        await supabase.rpc('increment_coupon_usage', { coupon_id: couponId });
+      }
+    }
+    // 기존 사이트 쿠폰 할인
+    else if (discountType === 'coupon' && couponData.couponActive && couponData.couponCode && dbPrice >= 9900) {
       discountAmount = couponData.couponDiscount;
-      discountType = 'site_coupon';
+      appliedDiscountType = 'site_coupon';
+      finalPrice = Math.max(0, dbPrice - discountAmount);
+    }
+    // 적립금 사용
+    else if (discountType === 'credits' && userProfile && userProfile.credits > 0) {
+      discountAmount = Math.min(userProfile.credits, dbPrice);
+      appliedDiscountType = 'credits';
+      finalPrice = Math.max(0, dbPrice - discountAmount);
+
+      // 💰 적립금 차감
+      await supabase
+        .from('user_profiles')
+        .update({ credits: userProfile.credits - discountAmount })
+        .eq('id', userProfile.id);
+
+      setUserProfile({
+        ...userProfile,
+        credits: userProfile.credits - discountAmount,
+      });
+    }
+    // URL 쿠폰 할인
+    else if (discountType === 'urlcoupon') {
+      const URL_COUPON_DISCOUNT = 3000;
+      discountAmount = URL_COUPON_DISCOUNT;
+      appliedDiscountType = 'url_coupon';
       finalPrice = Math.max(0, dbPrice - discountAmount);
     }
 
@@ -587,7 +644,7 @@ export default function HowlChat() {
       chat_log: chatLog,
       status: 'pending',
       discount_amount: discountAmount,
-      discount_type: discountType,
+      discount_type: appliedDiscountType,
       final_price: finalPrice,
     });
 
