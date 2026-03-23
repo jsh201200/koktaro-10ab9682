@@ -9,7 +9,20 @@ import { formatElla } from '@/lib/ella';
 interface MenuGridProps {
   onSelect: (menu: Menu) => void;
   onClose: () => void;
-  counselorId?: string; // ✨ 상담사 ID 받기
+  counselorId?: string;
+}
+
+interface DbProduct {
+  id: string;
+  menu_id: number;
+  name: string;
+  icon: string;
+  desc: string;
+  detail_desc: string;
+  price: number;
+  duration_minutes: number;
+  enabled: boolean;
+  sort_order: number;
 }
 
 interface MenuWithPrice extends Menu {
@@ -56,17 +69,27 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
           )}
         </div>
 
-        {/* Back */}
+        {/* Back - 🆕 개선된 버전 */}
         <div
-          className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center border border-primary/20 ${
-            isSnack ? 'bg-gradient-to-br from-primary/10 to-pink-100/80' : 'glass-strong'
+          className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
+            isSnack 
+              ? 'bg-primary/15 border-2 border-primary/40' 
+              : 'bg-slate-900/90 border border-primary/40'
           }`}
         >
-          <span className="text-[9px] text-muted-foreground mb-1">{menu.categoryName}</span>
-          <span className="text-lg font-bold text-primary mb-1">
+          <span className={`text-[9px] font-semibold mb-2 ${isSnack ? 'text-primary' : 'text-primary/80'}`}>
+            {menu.categoryName}
+          </span>
+          <span className={`text-lg font-bold mb-2 ${isSnack ? 'text-primary' : 'text-primary'}`}>
             {formatElla(menu.price)}
           </span>
-          <p className="text-[10px] text-muted-foreground mb-3 px-2 leading-tight">{menu.detailDesc}</p>
+          <p className={`text-[10px] mb-3 px-2 leading-tight ${
+            isSnack 
+              ? 'text-slate-700' 
+              : 'text-slate-100'
+          }`}>
+            {menu.detailDesc}
+          </p>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -84,10 +107,11 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
 
 export default function MenuGrid({ onSelect, onClose, counselorId }: MenuGridProps) {
   const [menusWithPrices, setMenusWithPrices] = useState<MenuWithPrice[]>([]);
+  const [allProducts, setAllProducts] = useState<DbProduct[]>([]);
 
-  // ✨ DB에서 실시간 가격 fetch
+  // ✨ products 테이블에서 직접 로드
   useEffect(() => {
-    const loadMenusWithPrices = async () => {
+    const loadProducts = async () => {
       const { data: products } = await supabase
         .from('products')
         .select('*')
@@ -95,21 +119,45 @@ export default function MenuGrid({ onSelect, onClose, counselorId }: MenuGridPro
         .order('sort_order');
 
       if (products) {
-        const merged = MENUS.map(menu => {
-          const product = products.find((p: any) => p.menu_id === menu.id);
-          return {
-            ...menu,
-            name: product?.name || menu.name,
-            price: product?.price || menu.price,
-          } as MenuWithPrice;
+        setAllProducts(products as DbProduct[]);
+
+        // MENUS와 products 병합 (같은 이름 메뉴들 모두 포함)
+        const merged: MenuWithPrice[] = [];
+
+        products.forEach((product: DbProduct) => {
+          const baseName = product.name.split(' - ')[0].trim();
+          
+          // 기존 MENUS에서 찾기
+          const existingMenu = MENUS.find(m => {
+            const mBaseName = m.name.split(' - ')[0].trim();
+            return mBaseName === baseName;
+          });
+
+          if (existingMenu) {
+            // 시간 정보 추가
+            const durationText = product.duration_minutes === 0 
+              ? '한 질문' 
+              : `${product.duration_minutes}분`;
+            
+            merged.push({
+              ...existingMenu,
+              id: product.menu_id, // ✨ menu_id 사용
+              name: product.name,
+              price: product.price,
+              desc: durationText,
+              detailDesc: product.detail_desc || existingMenu.detailDesc,
+              icon: product.icon || existingMenu.icon,
+            } as MenuWithPrice);
+          }
         });
+
         setMenusWithPrices(merged);
       } else {
         setMenusWithPrices(MENUS.map(m => ({ ...m, price: m.price } as MenuWithPrice)));
       }
     };
 
-    loadMenusWithPrices();
+    loadProducts();
 
     const channel = supabase
       .channel('products-changes-menu')
@@ -117,7 +165,7 @@ export default function MenuGrid({ onSelect, onClose, counselorId }: MenuGridPro
         'postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         () => {
-          loadMenusWithPrices();
+          loadProducts();
         }
       )
       .subscribe();
@@ -138,7 +186,7 @@ export default function MenuGrid({ onSelect, onClose, counselorId }: MenuGridPro
   const filteredMenus = getFilteredMenus();
   const currentCounselor = counselorId ? COUNSELORS.find(c => c.id === counselorId) : null;
 
-  // ✨ 카테고리별 그룹핑 (상담사 필터 적용된 것만)
+  // ✨ 카테고리별 그룹핑
   const categories = ['A', 'B', 'C', 'D'] as const;
   const hasCategory = (cat: string) => filteredMenus.some(m => m.category === cat);
 
