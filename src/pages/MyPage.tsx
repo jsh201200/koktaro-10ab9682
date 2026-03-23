@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, LogOut, Trash2, Calendar, User, CreditCard, MessageSquare, Gift, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { MENUS } from '@/data/menus';
+import { COUNSELORS } from '@/data/counselors';
 
 interface UserProfile {
   id: string;
@@ -16,14 +18,17 @@ interface UserProfile {
   created_at?: string;
 }
 
-interface ChatSession {
+interface ChatSessionData {
   id: string;
+  created_at: string;
   user_nickname: string;
   selected_menu_id: number;
+  room_id: string;
+}
+
+interface ChatSessionDisplay extends ChatSessionData {
   selected_menu_name: string;
-  counselor_id: string;
   counselor_name: string;
-  created_at: string;
 }
 
 interface Payment {
@@ -47,7 +52,7 @@ interface Review {
 export default function MyPage() {
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSessionDisplay[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,44 +99,69 @@ export default function MyPage() {
             birth_time: profile.birth_time || '',
             gender: profile.gender || '',
           });
-        }
 
-        // 2️⃣ 상담 내역 (3일 이내)
-        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-       const { data: sessions } = await supabase
-  .from('chat_sessions')
-  .select('id, created_at, user_nickname, profile_id')
-          .eq('profile_id', profileId)
-          .gte('created_at', threeDaysAgo)
-          .order('created_at', { ascending: false });
+          // 2️⃣ 상담 내역 (3일 이내) - 정확한 컬럼만 선택
+          const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: sessions } = await supabase
+            .from('chat_sessions')
+            .select('id, created_at, user_nickname, selected_menu_id, room_id')
+            .eq('profile_id', profileId)
+            .gte('created_at', threeDaysAgo)
+            .order('created_at', { ascending: false });
 
-        if (sessions) {
-          setChatSessions(sessions as ChatSession[]);
-        }
+          if (sessions) {
+            // 🔧 menu_id로 MENUS 배열에서 메뉴명 찾기 + 상담사명 찾기
+            const displaySessions: ChatSessionDisplay[] = (sessions as ChatSessionData[]).map(session => {
+              // 메뉴명 찾기
+              const menu = MENUS.find(m => m.id === session.selected_menu_id);
+              const selectedMenuName = menu?.name || `메뉴 ID: ${session.selected_menu_id}`;
 
-        // 3️⃣ 결제 내역
-        const { data: paymentData } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('user_nickname', profile?.nickname || '')
-          .order('created_at', { ascending: false });
+              // 상담사명 찾기 (room_id에서 추출: "room_{counselor_id}_...")
+              let counselorName = '알 수 없음';
+              if (session.room_id) {
+                const roomParts = session.room_id.split('_');
+                if (roomParts.length > 1) {
+                  const counselorId = roomParts[1];
+                  const counselor = COUNSELORS.find(c => c.id === counselorId);
+                  counselorName = counselor?.name || '알 수 없음';
+                }
+              }
 
-        if (paymentData) {
-          setPayments(paymentData as Payment[]);
-        }
+              return {
+                ...session,
+                selected_menu_name: selectedMenuName,
+                counselor_name: counselorName,
+              };
+            });
 
-        // 4️⃣ 적립금 내역 (후기)
-        const { data: reviewData } = await supabase
-          .from('reviews')
-          .select('id, created_at, credits_awarded')
-          .eq('user_nickname', profile?.nickname || '')
-          .order('created_at', { ascending: false });
+            setChatSessions(displaySessions);
+          }
 
-        if (reviewData) {
-          setReviews(reviewData as Review[]);
+          // 3️⃣ 결제 내역
+          const { data: paymentData } = await supabase
+            .from('payments')
+            .select('*')
+            .eq('user_nickname', profile.nickname || '')
+            .order('created_at', { ascending: false });
+
+          if (paymentData) {
+            setPayments(paymentData as Payment[]);
+          }
+
+          // 4️⃣ 적립금 내역 (후기)
+          const { data: reviewData } = await supabase
+            .from('reviews')
+            .select('id, created_at, credits_awarded')
+            .eq('masked_name', profile.nickname || '')
+            .order('created_at', { ascending: false });
+
+          if (reviewData) {
+            setReviews(reviewData as Review[]);
+          }
         }
       } catch (error: any) {
-        toast.error('데이터 로드 실패: ' + error.message);
+        console.error('데이터 로드 오류:', error);
+        toast.error('데이터 로드 실패');
       }
 
       setLoading(false);
@@ -186,7 +216,6 @@ export default function MyPage() {
     setShowDeleteModal(false);
 
     try {
-      // 사용자 데이터 삭제 (실제로는 soft delete 추천)
       const { error } = await supabase
         .from('user_profiles')
         .delete()
