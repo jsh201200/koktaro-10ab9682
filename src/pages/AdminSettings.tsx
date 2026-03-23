@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag, Plus, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
 import { MENUS } from '@/data/menus';
@@ -9,11 +9,12 @@ import { toast } from 'sonner';
 import CouponManager from '@/components/admin/CouponManager';
 import SiteConfigEditor from '@/components/admin/SiteConfigEditor';
 
-type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'messages' | 'security' | 'coupons' | 'site';
+type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'messages' | 'security' | 'coupons' | 'site' | 'reviews';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'site', label: '사이트 설정', icon: <Globe className="w-4 h-4" /> },
   { id: 'coupons', label: '쿠폰/이벤트', icon: <Tag className="w-4 h-4" /> },
+  { id: 'reviews', label: '후기 추가', icon: <MessageCircle className="w-4 h-4" /> },
   { id: 'branding', label: '브랜딩', icon: <Type className="w-4 h-4" /> },
   { id: 'colors', label: '배경/색상', icon: <Palette className="w-4 h-4" /> },
   { id: 'links', label: '링크 연결', icon: <Link2 className="w-4 h-4" /> },
@@ -24,6 +25,24 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'security', label: '보안', icon: <Shield className="w-4 h-4" /> },
 ];
 
+interface Review {
+  id?: string;
+  user_nickname: string;
+  masked_name: string;
+  content: string;
+  rating: number;
+  menu_name?: string;
+  is_approved: boolean;
+  credits_awarded?: number;
+  created_at?: string;
+}
+
+interface CouponData {
+  couponCode: string;
+  couponDiscount: number;
+  couponActive: boolean;
+}
+
 export default function AdminSettings() {
   const navigate = useNavigate();
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -33,6 +52,92 @@ export default function AdminSettings() {
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // 후기 관리 상태
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formData, setFormData] = useState<Review>({
+    user_nickname: '',
+    masked_name: '',
+    content: '',
+    rating: 5,
+    menu_name: '종합분석',
+    is_approved: true,
+    credits_awarded: 1000,
+  });
+
+  const SAMPLE_REVIEWS = [
+    {
+      user_nickname: '민준',
+      masked_name: '민*',
+      content: '정말 명확한 조언을 받았어요! 일주일만에 변화가 느껴집니다 🌟',
+      rating: 5,
+      menu_name: '종합분석',
+    },
+    {
+      user_nickname: '김영',
+      masked_name: '김*',
+      content: '궁합 상담이 정확했어요. 추천합니다!',
+      rating: 5,
+      menu_name: '궁합보기',
+    },
+    {
+      user_nickname: '박서진',
+      masked_name: '박**',
+      content: '처음엔 의심했는데... 와 진짜 맞네요 😲',
+      rating: 5,
+      menu_name: '타로카드',
+    },
+    {
+      user_nickname: '이수현',
+      masked_name: '이*',
+      content: '상담사님이 정말 친절하고 전문적이에요',
+      rating: 5,
+      menu_name: '심리상담',
+    },
+    {
+      user_nickname: '정은지',
+      masked_name: '정*',
+      content: '비용은 좀 들었지만 정말 가치있었습니다',
+      rating: 4,
+      menu_name: '운세분석',
+    },
+    {
+      user_nickname: '홍길동',
+      masked_name: '홍*',
+      content: '운명이 아니라 행동으로 바꾼다는 말... 깊이 생각해봤어요',
+      rating: 5,
+      menu_name: '종합분석',
+    },
+    {
+      user_nickname: '최민서',
+      masked_name: '최*',
+      content: '친구에게 추천해줬더니 친구도 좋다고 했어요!',
+      rating: 5,
+      menu_name: '연애운',
+    },
+    {
+      user_nickname: '손예진',
+      masked_name: '손*',
+      content: '잠깐이지만 기분이 좋아졌어요 ✨',
+      rating: 4,
+      menu_name: '한 뼘 운세',
+    },
+    {
+      user_nickname: '곽은정',
+      masked_name: '곽*',
+      content: '전문적인 상담이었습니다. 감사합니다!',
+      rating: 5,
+      menu_name: '사주풀이',
+    },
+    {
+      user_nickname: '서지현',
+      masked_name: '서*',
+      content: '다양한 관점에서 봐줘서 고마워요',
+      rating: 5,
+      menu_name: '관상분석',
+    },
+  ];
+
   const handlePasswordCheck = (val: string) => {
     setPassword(val);
     const s = loadSettings();
@@ -41,14 +146,11 @@ export default function AdminSettings() {
     }
   };
 
-  // ✨ 저장 시 localStorage + Supabase DB 동시 저장
   const handleSave = async () => {
     setIsSaving(true);
 
-    // 1. localStorage에 저장 (기존 방식)
     saveSettings(settings);
 
-    // 2. 상품 관리 탭이면 Supabase DB에도 반영
     if (activeTab === 'menus') {
       const upsertData = MENUS.map(menu => {
         const override = settings.menuOverrides[menu.id] || {};
@@ -106,7 +208,99 @@ export default function AdminSettings() {
     }));
   };
 
-  // ✨ 페이지 진입 시 DB에서 현재 가격 불러와서 settings에 반영
+  // 후기 추가
+  const addSampleReviews = async () => {
+    try {
+      const reviewsWithDefaults = SAMPLE_REVIEWS.map((review) => ({
+        ...review,
+        is_approved: true,
+        credits_awarded: 1000,
+      }));
+
+      const { error } = await supabase.from('reviews').insert(reviewsWithDefaults);
+
+      if (error) {
+        toast.error(`추가 실패: ${error.message}`);
+        return;
+      }
+
+      toast.success('샘플 후기 10개가 추가되었습니다! 🎉');
+      setShowAddForm(false);
+      fetchReviews();
+    } catch (err: any) {
+      toast.error(`오류: ${err.message}`);
+    }
+  };
+
+  const addReview = async () => {
+    if (!formData.user_nickname || !formData.content) {
+      toast.error('이름과 내용을 입력해주세요');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('reviews').insert([
+        {
+          ...formData,
+          is_approved: true,
+          credits_awarded: 1000,
+        },
+      ]);
+
+      if (error) {
+        toast.error(`추가 실패: ${error.message}`);
+        return;
+      }
+
+      toast.success('후기가 추가되었습니다! ✅');
+      setFormData({
+        user_nickname: '',
+        masked_name: '',
+        content: '',
+        rating: 5,
+        menu_name: '종합분석',
+        is_approved: true,
+        credits_awarded: 1000,
+      });
+      setShowAddForm(false);
+      fetchReviews();
+    } catch (err: any) {
+      toast.error(`오류: ${err.message}`);
+    }
+  };
+
+  const deleteReview = async (id: string) => {
+    if (!confirm('정말 삭제할까요?')) return;
+
+    try {
+      const { error } = await supabase.from('reviews').delete().eq('id', id);
+
+      if (error) {
+        toast.error(`삭제 실패: ${error.message}`);
+        return;
+      }
+
+      toast.success('후기가 삭제되었습니다');
+      fetchReviews();
+    } catch (err: any) {
+      toast.error(`오류: ${err.message}`);
+    }
+  };
+
+  const fetchReviews = async () => {
+    try {
+      const { data } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false });
+
+      setReviews(data || []);
+    } catch (err: any) {
+      toast.error(`조회 실패: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthorized) return;
     const loadDbPrices = async () => {
@@ -132,7 +326,11 @@ export default function AdminSettings() {
       }
     };
     loadDbPrices();
-  }, [isAuthorized]);
+
+    if (activeTab === 'reviews') {
+      fetchReviews();
+    }
+  }, [isAuthorized, activeTab]);
 
   if (!isAuthorized) {
     return (
@@ -217,6 +415,186 @@ export default function AdminSettings() {
         >
           {activeTab === 'site' && <SiteConfigEditor />}
           {activeTab === 'coupons' && <CouponManager />}
+
+          {/* 📝 후기 추가 섹션 */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground mb-4">📝 후기 추가</h2>
+
+                {/* 액션 버튼들 */}
+                <div className="flex gap-3 mb-6 flex-wrap">
+                  <button
+                    onClick={addSampleReviews}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold hover:shadow-lg transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    샘플 후기 10개 추가
+                  </button>
+
+                  <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl glass hover:bg-white/60 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    개별 추가
+                  </button>
+
+                  <button
+                    onClick={fetchReviews}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl glass hover:bg-white/60 transition-colors"
+                  >
+                    🔄 새로고침
+                  </button>
+                </div>
+
+                {/* 개별 추가 폼 */}
+                {showAddForm && (
+                  <div className="glass rounded-2xl p-6 mb-6 space-y-4">
+                    <h3 className="font-semibold text-foreground">후기 추가</h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        placeholder="사용자 이름"
+                        value={formData.user_nickname}
+                        onChange={(e) =>
+                          setFormData({ ...formData, user_nickname: e.target.value })
+                        }
+                        className="px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <input
+                        type="text"
+                        placeholder="마스킹 이름 (예: 민*)"
+                        value={formData.masked_name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, masked_name: e.target.value })
+                        }
+                        className="px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+
+                    <textarea
+                      placeholder="후기 내용..."
+                      value={formData.content}
+                      onChange={(e) =>
+                        setFormData({ ...formData, content: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      rows={3}
+                    />
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">별점</label>
+                        <select
+                          value={formData.rating}
+                          onChange={(e) =>
+                            setFormData({ ...formData, rating: parseInt(e.target.value) })
+                          }
+                          className="w-full px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <option key={n} value={n}>
+                              {'⭐'.repeat(n)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">메뉴명</label>
+                        <input
+                          type="text"
+                          placeholder="예: 종합분석"
+                          value={formData.menu_name || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, menu_name: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">적립금</label>
+                        <input
+                          type="number"
+                          value={formData.credits_awarded || 1000}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              credits_awarded: parseInt(e.target.value),
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={addReview}
+                        className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold hover:shadow-lg transition-all"
+                      >
+                        추가하기
+                      </button>
+                      <button
+                        onClick={() => setShowAddForm(false)}
+                        className="flex-1 px-4 py-2 rounded-xl glass hover:bg-white/60 transition-colors"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 후기 목록 */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-foreground">
+                    현재 후기 ({reviews.length}개)
+                  </h3>
+
+                  {reviews.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      후기가 없습니다. "샘플 후기 10개 추가"를 눌러보세요! 💬
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                      {reviews.map((review) => (
+                        <div
+                          key={review.id}
+                          className="glass rounded-lg p-3 flex justify-between items-start"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="font-semibold text-sm">
+                                {review.masked_name}
+                              </span>
+                              <span className="text-xs text-yellow-500">
+                                {'⭐'.repeat(review.rating)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {review.menu_name}
+                              </span>
+                            </div>
+                            <p className="text-sm text-foreground line-clamp-2">
+                              {review.content}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => deleteReview(review.id!)}
+                            className="ml-2 p-1.5 rounded-lg hover:bg-destructive/20 transition-colors flex-shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'branding' && (
             <div className="space-y-5">
@@ -405,7 +783,6 @@ export default function AdminSettings() {
                 이 비밀번호는 관리자 대시보드(/admin), 관리자 설정, 채팅 승인 단축키에 사용됩니다.
               </p>
 
-              {/* ✨ 테스트 모드 토글 */}
               <div className="glass rounded-2xl p-4 border border-primary/20">
                 <div className="flex items-center justify-between">
                   <div>
