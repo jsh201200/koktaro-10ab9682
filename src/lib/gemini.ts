@@ -1,4 +1,4 @@
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/howl-chat`;
+const CHAT_URL = `$https://ktpnfhezbaaiwzxlwgqi.supabase.co/functions/v1/smart-responder}/functions/v1/howl-chat`;
 
 interface ChatHistoryMessage {
   role: 'bot' | 'user';
