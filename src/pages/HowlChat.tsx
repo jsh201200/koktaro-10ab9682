@@ -74,7 +74,6 @@ export default function HowlChat() {
   const greetingSent = useRef(false);
   const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
 
-  // 🔐 세션 검증 및 초기화
   useEffect(() => {
     const validateSession = async () => {
       const storedSessionId = localStorage.getItem('howl_session_id');
@@ -321,7 +320,6 @@ export default function HowlChat() {
     addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
     toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
 
-    // ✨ 결제 후 상담사가 먼저 웰컴 가이드 말하기
     setTimeout(() => {
       const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
       const name = session.userName || userProfile?.nickname || '';
@@ -492,11 +490,10 @@ export default function HowlChat() {
       imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
       roomId,
-      counselorId: counselor.id, // ✨ 메뉴 선택 시 counselorId 저장
+      counselorId: counselor.id,
     });
 
     if (menu.id === 0) {
-      // ✨ 테스트 모드면 결제 스킵
       if (loadSettings().testMode) {
         activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
         addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
@@ -511,7 +508,6 @@ export default function HowlChat() {
       return;
     }
 
-    // ✨ 테스트 모드면 결제 스킵하고 상담사가 먼저 말 걸기
     if (loadSettings().testMode) {
       activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
       addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
@@ -523,7 +519,6 @@ export default function HowlChat() {
       return;
     }
 
-    // ✨ 모든 메뉴 결제창 띄우기
     setShowPayment(true);
   };
 
@@ -655,8 +650,17 @@ export default function HowlChat() {
     addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n금액: ${price.toLocaleString()}원\n\n결제 확인 후 심층 리포트를 작성해줄게!`);
   };
 
-  const handleAuthComplete = (profile: UserProfile) => {
-    setUserProfile(profile);
+  const handleAuthComplete = (profile: any) => {
+    setUserProfile({
+      id: profile.id,
+      phone: profile.phone,
+      nickname: profile.nickname || '',
+      credits: profile.credits || 0,
+      birth_date: profile.birth_date,
+      birth_time: profile.birth_time,
+      gender: profile.gender,
+    });
+    
     localStorage.setItem('howl_profile_id', profile.id);
     localStorage.setItem('howl_last_auth_id', profile.id);
     localStorage.setItem('howl_last_auth_time', Date.now().toString());
@@ -668,9 +672,57 @@ export default function HowlChat() {
     }
 
     setView('chat');
+
+    if (profile.approvedPayment) {
+      const approvedPayment = profile.approvedPayment;
+      
+      const approvedTime = new Date(approvedPayment.approved_at).getTime();
+      const now = Date.now();
+      const elapsedMinutes = (now - approvedTime) / (1000 * 60);
+      
+      if (elapsedMinutes < 30) {
+        setTimeout(() => {
+          const menu = MENUS.find(m => m.id === approvedPayment.menu_id);
+          if (menu) {
+            const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+            const actualMenu = dbProduct 
+              ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
+              : menu;
+            
+            updateSession({
+              selectedMenu: actualMenu,
+              freeReadingDone: false,
+              questionCount: 0,
+              imageFailCount: 0,
+              userName: profile.nickname,
+              roomId: `room_${Date.now()}`,
+            });
+
+            const counselor = getCounselorForMenu(menu.id);
+            
+            setTimeout(() => {
+              const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
+              addBotMessage(
+                welcomeGuide || 
+                `${profile.nickname}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨\n\n궁금한 것을 말씀해줘!`
+              );
+            }, 800);
+
+            const dbProduct2 = dbProducts.find(p => p.menu_id === menu.id);
+            const durationMin = dbProduct2?.duration_minutes || 30;
+            activatePaidMode(durationMin, menu.id, actualMenu.name, approvedPayment.price);
+
+            addSystemMessage('💜 이전 결제가 확인되었습니다. 상담을 계속 진행합니다.');
+            toast.success("결제 정보를 불러왔습니다! 상담을 이어가세요 ✨");
+          }
+        }, 1000);
+      } else {
+        addSystemMessage(`⏰ 결제 승인 후 30분이 지나 상담 시간이 종료되었습니다.\n추가 결제를 원하시면 메뉴에서 다시 신청해주세요.`);
+        toast.info("이전 결제 시간이 종료되었습니다. 추가 결제를 원하면 메뉴를 선택해주세요 ✨");
+      }
+    }
   };
 
-  // ✨ counselorId도 받아서 session에 저장
   const handleStartChat = (menuId?: number, counselorId?: string) => {
     if (!userProfile && !localStorage.getItem('howl_profile_id')) {
       setView('auth');
@@ -679,7 +731,6 @@ export default function HowlChat() {
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
         if (menu) {
-          // counselorId를 session에 먼저 저장
           if (counselorId) {
             updateSession({ counselorId });
           }
@@ -727,7 +778,6 @@ export default function HowlChat() {
     );
   }
 
-  // ✨ selectedMenu가 있으면 메뉴 기반, 없으면 counselorId로 상담사 찾기
   const currentCounselor = session.selectedMenu
     ? getCounselorForMenu(session.selectedMenu.id)
     : session.counselorId
