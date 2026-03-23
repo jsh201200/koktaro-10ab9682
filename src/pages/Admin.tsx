@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { loadSettings } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { RefreshCw, Trash2, Edit2, Star, X, Settings, Ticket } from 'lucide-react';
+import { RefreshCw, Trash2, Edit2, Star, X, Settings, Ticket, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -35,9 +35,7 @@ interface Review {
 }
 
 interface Stats {
-  todayRevenue: number;
-  weekRevenue: number;
-  monthRevenue: number;
+  totalRevenue: number;
   pendingCount: number;
   totalReviews: number;
   approvedReviews: number;
@@ -49,6 +47,7 @@ interface UserProfile {
   nickname: string;
   credits: number;
   created_at: string;
+  pin?: string;
 }
 
 interface CouponData {
@@ -65,23 +64,32 @@ export default function AdminDashboard() {
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats>({
-    todayRevenue: 0,
-    weekRevenue: 0,
-    monthRevenue: 0,
+    totalRevenue: 0,
     pendingCount: 0,
     totalReviews: 0,
     approvedReviews: 0,
   });
 
+  // 📊 매출 통계 관련
+  const [statsPeriod, setStatsPeriod] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [statsRevenue, setStatsRevenue] = useState(0);
+  const [statsApprovedCount, setStatsApprovedCount] = useState(0);
+
+  // 후기 관리 (페이지네이션)
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewsPerPage] = useState(10);
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [editContent, setEditContent] = useState('');
   const [editRating, setEditRating] = useState(5);
 
+  // 고객 관리 (폰번호, PIN 포함)
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchUser, setSearchUser] = useState('');
+  const [showPinFor, setShowPinFor] = useState<string | null>(null);
 
-  // 쿠폰 상태
   const [coupon, setCoupon] = useState<CouponData>({
     couponCode: '',
     couponDiscount: 0,
@@ -113,34 +121,41 @@ export default function AdminDashboard() {
   };
 
   const fetchStats = async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(today);
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    let startDate = new Date();
+    
+    if (statsPeriod === 'today') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (statsPeriod === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (statsPeriod === 'month') {
+      startDate.setMonth(startDate.getMonth() - 1);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (statsPeriod === 'custom' && customStartDate) {
+      startDate = new Date(customStartDate);
+      startDate.setHours(0, 0, 0, 0);
+    }
 
-    const { data: todayData } = await supabase
+    let endDate = new Date();
+    if (statsPeriod === 'custom' && customEndDate) {
+      endDate = new Date(customEndDate);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    const { data: statsData } = await supabase
       .from('payments')
       .select('final_price, price')
       .eq('status', 'approved')
-      .gte('created_at', today.toISOString());
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString());
 
-    const { data: weekData } = await supabase
-      .from('payments')
-      .select('final_price, price')
-      .eq('status', 'approved')
-      .gte('created_at', weekAgo.toISOString());
+    const revenue = statsData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
+    const count = statsData?.length || 0;
 
-    const { data: monthData } = await supabase
-      .from('payments')
-      .select('final_price, price')
-      .eq('status', 'approved')
-      .gte('created_at', monthAgo.toISOString());
-
-    const todayRevenue = todayData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
-    const weekRevenue = weekData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
-    const monthRevenue = monthData?.reduce((sum, p) => sum + (p.final_price || p.price || 0), 0) || 0;
+    setStatsRevenue(revenue);
+    setStatsApprovedCount(count);
 
     const { data: allReviews } = await supabase
       .from('reviews')
@@ -149,9 +164,7 @@ export default function AdminDashboard() {
     const approvedReviews = allReviews?.filter(r => r.is_approved).length || 0;
 
     setStats({
-      todayRevenue,
-      weekRevenue,
-      monthRevenue,
+      totalRevenue: revenue,
       pendingCount: payments.filter(p => p.status === 'pending').length,
       totalReviews: allReviews?.length || 0,
       approvedReviews,
@@ -171,10 +184,9 @@ export default function AdminDashboard() {
       .from('user_profiles')
       .select('*')
       .order('created_at', { ascending: false });
-    if (data) setUsers(data);
+    if (data) setUsers(data as UserProfile[]);
   };
 
-  // 쿠폰 데이터 fetch
   const fetchCoupon = async () => {
     setCouponLoading(true);
     const { data, error } = await supabase
@@ -191,7 +203,6 @@ export default function AdminDashboard() {
     setCouponLoading(false);
   };
 
-  // 쿠폰 저장
   const handleSaveCoupon = async () => {
     if (!couponCode.trim()) {
       toast.error('쿠폰 코드를 입력하세요');
@@ -218,7 +229,6 @@ export default function AdminDashboard() {
 
     if (error) {
       toast.error('쿠폰 저장 실패');
-      console.error(error);
     } else {
       toast.success('쿠폰이 저장되었습니다!');
       setCoupon(newCouponData);
@@ -227,7 +237,6 @@ export default function AdminDashboard() {
     setCouponLoading(false);
   };
 
-  // 쿠폰 활성화/비활성화
   const handleToggleCoupon = async () => {
     setCouponLoading(true);
 
@@ -251,6 +260,26 @@ export default function AdminDashboard() {
     setCouponLoading(false);
   };
 
+  // 매출 통계 리셋 (테스트용 결제 삭제)
+  const handleResetStats = async () => {
+    if (!confirm('정말 모든 매출 기록을 삭제하시겠습니까? (복구 불가)')) return;
+
+    setLoading(true);
+    const { error } = await supabase
+      .from('payments')
+      .delete()
+      .not('id', 'is', null);
+
+    if (error) {
+      toast.error('삭제 실패');
+    } else {
+      toast.success('모든 매출 기록이 삭제되었습니다');
+      fetchPayments();
+      fetchStats();
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (isAuthorized) {
       fetchPayments();
@@ -261,10 +290,10 @@ export default function AdminDashboard() {
   }, [isAuthorized]);
 
   useEffect(() => {
-    if (payments.length > 0) {
+    if (payments.length >= 0) {
       fetchStats();
     }
-  }, [payments]);
+  }, [payments, statsPeriod, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (!isAuthorized) return;
@@ -392,6 +421,14 @@ export default function AdminDashboard() {
   const pending = payments.filter(p => p.status === 'pending');
   const approved = payments.filter(p => p.status === 'approved');
   const pendingReviews = reviews.filter(r => !r.is_approved);
+  const approvedReviews = reviews.filter(r => r.is_approved);
+
+  // 페이지네이션
+  const totalReviewPages = Math.ceil(reviews.length / reviewsPerPage);
+  const startIdx = (reviewPage - 1) * reviewsPerPage;
+  const paginatedReviews = reviews.slice(startIdx, startIdx + reviewsPerPage);
+
+  const filteredUsers = users.filter(u => u.nickname.includes(searchUser) || u.phone.includes(searchUser));
 
   return (
     <div className="min-h-svh aurora-bg p-4 sm:p-8">
@@ -444,18 +481,63 @@ export default function AdminDashboard() {
 
         {activeTab === 'dashboard' && (
           <div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            {/* 📊 매출 통계 필터 */}
+            <div className="glass-strong rounded-2xl p-4 glow-border mb-6">
+              <h3 className="text-sm font-bold text-primary mb-3">📈 매출 통계 기간 선택</h3>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {['today', 'week', 'month', 'custom'].map(period => (
+                  <button
+                    key={period}
+                    onClick={() => setStatsPeriod(period as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                      statsPeriod === period
+                        ? 'bg-primary text-primary-foreground'
+                        : 'glass hover:bg-white/40'
+                    }`}
+                  >
+                    {period === 'today' && '오늘'}
+                    {period === 'week' && '이번 주'}
+                    {period === 'month' && '이번 달'}
+                    {period === 'custom' && '직접 선택'}
+                  </button>
+                ))}
+              </div>
+
+              {statsPeriod === 'custom' && (
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="flex-1 p-2 rounded-xl glass text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground flex items-center">~</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="flex-1 p-2 rounded-xl glass text-xs"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={handleResetStats}
+                className="px-3 py-1.5 bg-destructive/20 text-destructive rounded-xl text-xs font-medium hover:bg-destructive/30 transition-all flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" /> 모든 매출 삭제 (테스트용)
+              </button>
+            </div>
+
+            {/* 📊 매출 통계 */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
               <div className="glass-strong rounded-2xl p-4 text-center glow-border">
-                <p className="text-2xl font-bold text-primary">{stats.todayRevenue.toLocaleString()}원</p>
-                <p className="text-xs text-muted-foreground">오늘 수익</p>
+                <p className="text-2xl font-bold text-primary">{statsRevenue.toLocaleString()}원</p>
+                <p className="text-xs text-muted-foreground">기간별 수익</p>
               </div>
               <div className="glass-strong rounded-2xl p-4 text-center glow-border">
-                <p className="text-2xl font-bold text-primary">{stats.weekRevenue.toLocaleString()}원</p>
-                <p className="text-xs text-muted-foreground">이번 주</p>
-              </div>
-              <div className="glass-strong rounded-2xl p-4 text-center glow-border">
-                <p className="text-2xl font-bold text-primary">{stats.monthRevenue.toLocaleString()}원</p>
-                <p className="text-xs text-muted-foreground">이번 달</p>
+                <p className="text-2xl font-bold text-primary">{statsApprovedCount}</p>
+                <p className="text-xs text-muted-foreground">승인 건수</p>
               </div>
               <div className="glass-strong rounded-2xl p-4 text-center glow-border">
                 <p className="text-2xl font-bold text-destructive">{stats.pendingCount}</p>
@@ -463,6 +545,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* ⏳ 입금 대기 */}
             <div className="mb-8">
               <h3 className="text-sm font-bold text-primary tracking-wider uppercase mb-4">
                 ⏳ 입금 대기 ({pending.length})
@@ -587,17 +670,19 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {reviews.filter(r => r.is_approved).length > 0 && (
+            {approvedReviews.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-muted-foreground tracking-wider uppercase mb-4">
-                  ✅ 승인 완료 ({reviews.filter(r => r.is_approved).length})
+                  ✅ 승인 완료 ({approvedReviews.length})
                 </h3>
-                <div className="space-y-2">
-                  {reviews.filter(r => r.is_approved).slice(0, 10).map((review) => (
+
+                {/* 📄 모든 후기 표시 (페이지네이션) */}
+                <div className="space-y-2 mb-4">
+                  {paginatedReviews.map((review) => (
                     <div key={review.id} className="glass rounded-2xl p-3">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm text-foreground">{review.content.substring(0, 50)}...</p>
+                        <div className="flex-1">
+                          <p className="text-sm text-foreground">{review.content.substring(0, 60)}...</p>
                           <p className="text-xs text-muted-foreground">{review.masked_name}</p>
                         </div>
                         <button
@@ -610,6 +695,29 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 </div>
+
+                {/* 페이지네이션 */}
+                {totalReviewPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <button
+                      onClick={() => setReviewPage(Math.max(1, reviewPage - 1))}
+                      disabled={reviewPage === 1}
+                      className="p-1 rounded-lg glass disabled:opacity-50"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      {reviewPage} / {totalReviewPages}
+                    </span>
+                    <button
+                      onClick={() => setReviewPage(Math.min(totalReviewPages, reviewPage + 1))}
+                      disabled={reviewPage === totalReviewPages}
+                      className="p-1 rounded-lg glass disabled:opacity-50"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -627,23 +735,34 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="space-y-2">
-              {users
-                .filter(u => u.nickname.includes(searchUser) || u.phone.includes(searchUser))
-                .map((user) => (
-                  <div key={user.id} className="glass-strong rounded-2xl p-3 flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{user.nickname}</p>
-                      <p className="text-xs text-muted-foreground">{user.phone}</p>
+              {filteredUsers.map((user) => (
+                <div key={user.id} className="glass-strong rounded-2xl p-3 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{user.nickname}</p>
+                    <p className="text-xs text-muted-foreground">{user.phone}</p>
+                    <div className="flex gap-2 mt-1">
                       <p className="text-xs text-primary">적립금: {user.credits.toLocaleString()}원</p>
+                      <button
+                        onClick={() => setShowPinFor(showPinFor === user.id ? null : user.id)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {showPinFor === user.id ? '비번 숨기기' : '비번 보기'}
+                      </button>
+                      {showPinFor === user.id && (
+                        <p className="text-xs font-bold bg-primary/20 px-2 py-0.5 rounded text-primary">
+                          PIN: {user.pin || '없음'}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="text-destructive hover:bg-destructive/20 p-2 rounded"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                ))}
+                  <button
+                    onClick={() => handleDeleteUser(user.id)}
+                    className="text-destructive hover:bg-destructive/20 p-2 rounded"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -661,7 +780,6 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-4">
-                {/* 현재 쿠폰 상태 */}
                 <div className="glass rounded-2xl p-4 mb-6">
                   <p className="text-xs text-muted-foreground mb-2">현재 쿠폰</p>
                   <div className="flex items-center justify-between">
@@ -689,7 +807,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 쿠폰 코드 입력 */}
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground block mb-2">
                     쿠폰 코드
@@ -701,10 +818,8 @@ export default function AdminDashboard() {
                     placeholder="예: LUCKY2025"
                     className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">사용자가 입력할 쿠폰 코드</p>
                 </div>
 
-                {/* 할인 금액 입력 */}
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground block mb-2">
                     할인 금액 (원)
@@ -717,10 +832,8 @@ export default function AdminDashboard() {
                     className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     min="0"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">사용자 결제 시 할인될 금액</p>
                 </div>
 
-                {/* 저장 버튼 */}
                 <button
                   onClick={handleSaveCoupon}
                   disabled={couponLoading}
@@ -728,13 +841,6 @@ export default function AdminDashboard() {
                 >
                   {couponLoading ? '저장 중...' : '쿠폰 저장'}
                 </button>
-
-                {/* 안내 */}
-                <div className="glass rounded-2xl p-3 mt-6">
-                  <p className="text-xs text-muted-foreground">
-                    💡 <strong>사용 방법:</strong> 쿠폰을 저장하고 활성화하면, 사용자가 결제할 때 자동으로 적용됩니다.
-                  </p>
-                </div>
               </div>
             </motion.div>
           </div>
