@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { LogOut } from 'lucide-react';
 
 interface PhoneAuthProps {
   onAuth: (profile: { 
@@ -21,10 +22,12 @@ interface PhoneAuthProps {
     } | null;
   }) => void;
   onSkip: () => void;
+  currentProfile?: { phone: string; nickname: string } | null;
+  onLogout?: () => void;
 }
 
-export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
-  const [step, setStep] = useState<'phone' | 'new_pin' | 'verify_pin' | 'nickname' | 'terms'>('phone');
+export default function PhoneAuth({ onAuth, onSkip, currentProfile, onLogout }: PhoneAuthProps) {
+  const [step, setStep] = useState<'phone' | 'new_pin' | 'verify_pin' | 'nickname' | 'terms' | 'logged_in'>('phone');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [nickname, setNickname] = useState('');
@@ -49,384 +52,389 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
     const cleanPhone = phone.replace(/-/g, '');
     
     if (!isValidPhone(phone)) {
-      toast.error('010으로 시작하는 11자리 번호를 입력해주세요');
+      toast.error('올바른 휴대폰 번호를 입력해주세요');
       return;
     }
 
     setIsLoading(true);
-    try {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('phone', cleanPhone)
-        .single();
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('phone', cleanPhone)
+      .single();
 
-      if (data) {
-        setExistingProfile(data);
-        setPinFailCount(0);
-        setPin('');
-        setStep('verify_pin');
-      } else {
-        setStep('new_pin');
-      }
-    } catch (error) {
-      setStep('new_pin');
-    } finally {
+    if (error && error.code !== 'PGRST116') {
+      toast.error('조회 중 오류가 발생했습니다');
       setIsLoading(false);
+      return;
     }
+
+    if (data) {
+      setExistingProfile(data);
+      setPinFailCount(0);
+      setStep('verify_pin');
+    } else {
+      setStep('new_pin');
+    }
+    setIsLoading(false);
   };
 
-  const resetSessionCompletely = () => {
-    localStorage.removeItem('howl_session_id');
-    localStorage.removeItem('howl_profile_id');
-    localStorage.removeItem('howl_last_auth_id');
-    localStorage.removeItem('howl_last_auth_time');
-    
-    const newSessionId = `session_${Date.now()}_${Math.random()}`;
-    localStorage.setItem('howl_session_id', newSessionId);
-    
-    toast.error('⚠️ 인증 실패. 새로 시작해주세요.');
-    setStep('phone');
-    setPhone('');
-    setPin('');
-    setExistingProfile(null);
-    setPinFailCount(0);
+  const handleNewPinSubmit = async () => {
+    if (pin.length !== 4 || isNaN(Number(pin))) {
+      toast.error('4자리 숫자를 입력해주세요');
+      return;
+    }
+
+    setStep('nickname');
   };
 
   const handleVerifyPin = async () => {
-    if (!existingProfile) return;
-    
-    if (pin === existingProfile.pin) {
-      const cachedSessionId = localStorage.getItem('howl_session_id');
-      if (cachedSessionId) {
-        const { data: sessionData } = await supabase
-          .from('chat_sessions')
-          .select('profile_id')
-          .eq('id', cachedSessionId)
-          .single();
-        
-        if (!sessionData || sessionData.profile_id !== existingProfile.id) {
-          localStorage.removeItem('howl_session_id');
-        }
-      }
-      
-      localStorage.setItem('howl_profile_id', existingProfile.id);
-      localStorage.setItem('howl_last_auth_id', existingProfile.id);
-      localStorage.setItem('howl_last_auth_time', Date.now().toString());
-      
-      const { data: approvedPayment } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_nickname', existingProfile.nickname)
-        .eq('status', 'approved')
-        .order('approved_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      const paymentInfo = approvedPayment ? {
-        menu_id: approvedPayment.menu_id,
-        menu_name: approvedPayment.menu_name,
-        price: approvedPayment.final_price || approvedPayment.price,
-        approved_at: approvedPayment.approved_at,
-        phone_tail: approvedPayment.phone_tail,
-      } : null;
-      
-      onAuth({
-        id: existingProfile.id,
-        phone: existingProfile.phone,
-        nickname: existingProfile.nickname || '',
-        credits: existingProfile.credits || 0,
-        birth_date: existingProfile.birth_date,
-        birth_time: existingProfile.birth_time,
-        gender: existingProfile.gender,
-        approvedPayment: paymentInfo,
-      });
-      toast.success(`${existingProfile.nickname || ''}님, 다시 만나서 반가워요! ✨`);
-      setPinFailCount(0);
-    } else {
-      const newFailCount = pinFailCount + 1;
-      setPinFailCount(newFailCount);
-      setPin('');
-
-      if (newFailCount >= 3) {
-        toast.error(`⚠️ 비밀번호 ${newFailCount}회 오류. 보안을 위해 새로 시작합니다.`);
-        resetSessionCompletely();
-      } else {
-        const remainAttempts = 3 - newFailCount;
-        toast.error(`비밀번호가 일치하지 않아요. (${remainAttempts}회 남음)`);
-      }
-    }
-  };
-
-  const handleNewPin = () => {
-    if (pin.length !== 4) {
-      toast.error('4자리 비밀번호를 입력해주세요');
+    if (pin.length !== 4 || isNaN(Number(pin))) {
+      toast.error('4자리 숫자를 입력해주세요');
       return;
     }
-    setStep('nickname');
+
+    if (pin !== existingProfile.pin) {
+      setPinFailCount(pinFailCount + 1);
+      if (pinFailCount >= 4) {
+        toast.error('비밀번호 오류가 5회 이상입니다. 관리자에게 문의하세요.');
+        setStep('phone');
+        setPhone('');
+        setPinFailCount(0);
+        return;
+      }
+      toast.error(`비밀번호가 틀렸습니다 (${5 - pinFailCount - 1}회 남음)`);
+      setPin('');
+      return;
+    }
+
+    // ✅ 세션 초기화
+    localStorage.removeItem('howl_session_id');
+    const newSessionId = `session_${Date.now()}_${Math.random()}`;
+    localStorage.setItem('howl_session_id', newSessionId);
+
+    // 승인된 결제 조회
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_nickname', existingProfile.nickname)
+      .eq('status', 'approved')
+      .order('approved_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const approvedPayment = payments ? {
+      menu_id: payments.menu_id,
+      menu_name: payments.menu_name,
+      price: payments.final_price || payments.price,
+      approved_at: payments.approved_at,
+      phone_tail: payments.phone_tail,
+    } : null;
+
+    localStorage.setItem('howl_profile_id', existingProfile.id);
+    localStorage.setItem('howl_last_auth_id', existingProfile.id);
+
+    onAuth({
+      ...existingProfile,
+      approvedPayment,
+    });
+
+    toast.success('로그인되었습니다 ✨');
+    setPin('');
   };
 
   const handleCreateProfile = async () => {
     if (!nickname.trim()) {
-      toast.error('호칭을 입력해주세요');
+      toast.error('닉네임을 입력해주세요');
       return;
     }
 
-    const cleanPhone = phone.replace(/-/g, '');
-    setIsLoading(true);
-
-    try {
-      const { data: existingData } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('phone', cleanPhone)
-        .single();
-
-      if (existingData) {
-        toast.error('이미 가입된 번호입니다. 로그인해주세요.');
-        setStep('phone');
-        return;
-      }
-
-      // ✨ NEW: 새 세션 생성 (기존 세션 초기화)
-      localStorage.removeItem('howl_session_id');
-      const newSessionId = `session_${Date.now()}_${Math.random()}`;
-      localStorage.setItem('howl_session_id', newSessionId);
-
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .insert({
-          phone: cleanPhone,
-          pin,
-          nickname: nickname.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === '23505') {
-          toast.error('이미 가입된 번호입니다');
-          setStep('phone');
-          return;
-        }
-        toast.error('프로필 생성에 실패했어요');
-        return;
-      }
-
-      localStorage.setItem('howl_profile_id', data.id);
-      localStorage.setItem('howl_last_auth_id', data.id);
-      localStorage.setItem('howl_last_auth_time', Date.now().toString());
-
-      setStep('terms');
-    } finally {
-      setIsLoading(false);
+    if (nickname.length > 20) {
+      toast.error('닉네임은 20자 이내로 입력해주세요');
+      return;
     }
+
+    if (pin.length !== 4 || isNaN(Number(pin))) {
+      toast.error('4자리 숫자 비밀번호를 입력해주세요');
+      return;
+    }
+
+    setStep('terms');
   };
 
-  const handleTermsAgree = () => {
+  const handleTermsAgree = async () => {
     if (!termsAgreed) {
       toast.error('약관에 동의해주세요');
       return;
     }
 
+    setIsLoading(true);
     const cleanPhone = phone.replace(/-/g, '');
+
+    // ✅ 세션 초기화
+    localStorage.removeItem('howl_session_id');
+    const newSessionId = `session_${Date.now()}_${Math.random()}`;
+    localStorage.setItem('howl_session_id', newSessionId);
+
+    const { data: newProfile, error } = await supabase
+      .from('user_profiles')
+      .insert({
+        phone: cleanPhone,
+        nickname: nickname.trim(),
+        pin,
+        credits: 0,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('가입 중 오류가 발생했습니다');
+      setIsLoading(false);
+      return;
+    }
+
+    localStorage.setItem('howl_profile_id', newProfile.id);
+    localStorage.setItem('howl_last_auth_id', newProfile.id);
+
     onAuth({
-      id: localStorage.getItem('howl_profile_id') || '',
-      phone: cleanPhone,
-      nickname: nickname.trim(),
-      credits: 0,
+      id: newProfile.id,
+      phone: newProfile.phone,
+      nickname: newProfile.nickname,
+      credits: newProfile.credits || 0,
       approvedPayment: null,
     });
-    toast.success('프로필이 생성되었어요! ✨');
+
+    toast.success('가입이 완료되었습니다! ✨');
+    setPhone('');
+    setPin('');
+    setNickname('');
+    setTermsAgreed(false);
+    setIsLoading(false);
   };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
-    >
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border"
-      >
-        <div className="text-center mb-5">
-          <span className="text-3xl mb-2 block">🔮</span>
-          <h3 className="font-display text-xl font-bold text-foreground neon-glow">콕타로</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            {step === 'phone' && '전화번호로 간편하게 시작해요'}
-            {step === 'verify_pin' && '비밀번호를 입력해주세요'}
-            {step === 'new_pin' && '상담용 비밀번호 4자리를 설정해주세요'}
-            {step === 'nickname' && '상담사가 부를 호칭을 알려주세요'}
-            {step === 'terms' && '약관에 동의해주세요'}
-          </p>
-        </div>
+  const handleLogout = () => {
+    localStorage.removeItem('howl_profile_id');
+    localStorage.removeItem('howl_last_auth_id');
+    localStorage.removeItem('howl_session_id');
+    setPhone('');
+    setPin('');
+    setNickname('');
+    setStep('phone');
+    if (onLogout) onLogout();
+    toast.info('로그아웃되었습니다 ✨');
+  };
 
-        {step === 'phone' && (
+  // 🔐 현재 로그인 상태 표시
+  if (currentProfile && step === 'logged_in') {
+    return (
+      <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="glass-strong rounded-3xl p-8 max-w-sm w-full text-center glow-border"
+        >
+          <span className="text-4xl mb-4 block">👤</span>
+          <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-2">로그인됨</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            {currentProfile.nickname}님 ({currentProfile.phone})
+          </p>
+          
           <div className="space-y-3">
+            <button
+              onClick={onSkip}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all"
+            >
+              계속하기
+            </button>
+            
+            <button
+              onClick={handleLogout}
+              className="w-full py-3 rounded-2xl glass text-foreground font-semibold text-sm hover:bg-muted/70 transition-all flex items-center justify-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              다른 계정으로 로그인
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass-strong rounded-3xl p-8 max-w-sm w-full text-center glow-border"
+      >
+        {step === 'phone' && (
+          <>
+            <span className="text-4xl mb-4 block">📞</span>
+            <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">휴대폰 번호</h2>
             <input
+              type="tel"
               value={phone}
               onChange={e => setPhone(formatPhone(e.target.value))}
-              className="w-full p-3 rounded-2xl glass text-center text-lg tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="010-0000-0000"
-              type="tel"
-              autoFocus
+              className="w-full p-3 rounded-2xl glass text-center text-lg tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
+              maxLength={13}
             />
             <button
               onClick={handlePhoneSubmit}
               disabled={!isValidPhone(phone) || isLoading}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               {isLoading ? '확인 중...' : '다음'}
             </button>
-      
-          </div>
-        )}
-
-        {step === 'verify_pin' && (
-          <div className="space-y-3">
-            <div className="glass rounded-2xl p-3 mb-2">
-              <p className="text-xs text-muted-foreground text-center">
-                {pinFailCount > 0 && (
-                  <span className="text-destructive">⚠️ {pinFailCount}회 실패 (3회 초과 시 차단)</span>
-                )}
-                {pinFailCount === 0 && (
-                  <span>비밀번호를 입력해주세요</span>
-                )}
-              </p>
-            </div>
-            <input
-              value={pin}
-              onChange={e => {
-                const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                setPin(v);
-              }}
-              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="····"
-              type="password"
-              maxLength={4}
-              autoFocus
-              disabled={pinFailCount >= 3}
-            />
             <button
-              onClick={handleVerifyPin}
-              disabled={pin.length !== 4 || pinFailCount >= 3}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              onClick={onSkip}
+              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              {pinFailCount >= 3 ? '차단됨' : '확인'}
+              건너뛰기
             </button>
-            <button
-              onClick={() => { 
-                setStep('phone'); 
-                setPhone('');
-                setPin('');
-                setExistingProfile(null);
-                setPinFailCount(0);
-              }}
-              disabled={pinFailCount >= 3}
-              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-            >
-              ← 번호 다시 입력
-            </button>
-          </div>
+          </>
         )}
 
         {step === 'new_pin' && (
-          <div className="space-y-3">
+          <>
+            <span className="text-4xl mb-4 block">🔐</span>
+            <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-2">4자리 비밀번호 설정</h2>
+            <p className="text-xs text-muted-foreground mb-6">숫자 4개를 조합해주세요</p>
             <input
-              value={pin}
-              onChange={e => {
-                const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                setPin(v);
-              }}
-              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="····"
               type="password"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="0000"
+              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
               maxLength={4}
-              autoFocus
             />
-            <p className="text-[10px] text-muted-foreground text-center">
-              🔐 다음 방문 시 이 비밀번호로 로그인하실 수 있어요. 꼭 기억해주세요!
-            </p>
             <button
-              onClick={handleNewPin}
+              onClick={handleNewPinSubmit}
               disabled={pin.length !== 4}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               다음
             </button>
-          </div>
+            <button
+              onClick={() => {
+                setStep('phone');
+                setPhone('');
+                setPin('');
+              }}
+              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← 뒤로
+            </button>
+          </>
+        )}
+
+        {step === 'verify_pin' && (
+          <>
+            <span className="text-4xl mb-4 block">🔐</span>
+            <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-2">비밀번호 확인</h2>
+            <p className="text-xs text-muted-foreground mb-6">4자리 비밀번호를 입력해주세요</p>
+            <input
+              type="password"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="0000"
+              className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
+              maxLength={4}
+            />
+            <button
+              onClick={handleVerifyPin}
+              disabled={pin.length !== 4 || isLoading}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
+            >
+              {isLoading ? '확인 중...' : '로그인'}
+            </button>
+            <button
+              onClick={() => {
+                setStep('phone');
+                setPhone('');
+                setPin('');
+                setPinFailCount(0);
+              }}
+              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← 뒤로
+            </button>
+          </>
         )}
 
         {step === 'nickname' && (
-          <div className="space-y-3">
+          <>
+            <span className="text-4xl mb-4 block">✨</span>
+            <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">닉네임 설정</h2>
             <input
+              type="text"
               value={nickname}
               onChange={e => setNickname(e.target.value)}
-              className="w-full p-3 rounded-2xl glass text-center text-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="호칭을 입력해주세요"
-              autoFocus
+              placeholder="닉네임 입력"
+              className="w-full p-3 rounded-2xl glass text-center focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
+              maxLength={20}
             />
+            <p className="text-xs text-muted-foreground mb-4">{nickname.length}/20</p>
             <button
               onClick={handleCreateProfile}
-              disabled={!nickname.trim() || isLoading}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              disabled={!nickname.trim() || pin.length !== 4}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
-              {isLoading ? '생성 중...' : '다음'}
+              다음
             </button>
-          </div>
+            <button
+              onClick={() => {
+                setStep('new_pin');
+                setNickname('');
+              }}
+              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← 뒤로
+            </button>
+          </>
         )}
 
         {step === 'terms' && (
-          <div className="space-y-4">
-            <div className="glass rounded-2xl p-4 max-h-48 overflow-y-auto">
-              <p className="text-xs text-foreground leading-relaxed space-y-3">
-                <span className="block font-semibold mb-2">📋 이용약관 및 개인정보 처리방침</span>
-                
-                <span className="block">
-                  <span className="font-semibold">1. 서비스 이용</span><br/>
-                  본 서비스는 데이터 분석을 기반으로 한 에듀테인먼트 콘텐츠입니다. 상담 결과는 자기 탐색을 위한 참고 자료일 뿐, 법적 책임을 보장하지 않습니다.
-                </span>
-
-                <span className="block">
-                  <span className="font-semibold">2. 개인정보 수집</span><br/>
-                  전화번호, 호칭, 상담 내용 등을 수집하여 서비스 제공에 사용합니다.
-                </span>
-
-                <span className="block">
-                  <span className="font-semibold">3. 환불 및 취소</span><br/>
-                  결제 후 즉시 서비스 제공이 시작되며, 단순 변심으로 인한 환불은 불가합니다.
-                </span>
-
-                <span className="block">
-                  <span className="font-semibold">4. 책임 제한</span><br/>
-                  본 서비스 이용으로 인한 손해에 대해 당사는 법적 책임을 지지 않습니다.
-                </span>
+          <>
+            <span className="text-4xl mb-4 block">📋</span>
+            <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">약관 동의</h2>
+            <div className="bg-muted/30 rounded-2xl p-4 max-h-40 overflow-y-auto mb-4 text-left">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                본 서비스는 데이터 분석을 기반으로 한 인사이트 에듀테인먼트 콘텐츠입니다.
+                <br /><br />
+                상담 결과는 자기 탐색을 위한 참고 자료일 뿐 법적 책임을 보장하지 않습니다.
+                <br /><br />
+                개인정보는 안전하게 보호되며 서비스 제공 목적으로만 사용됩니다.
               </p>
             </div>
-
-            <label className="flex items-center gap-2 p-3 rounded-xl glass cursor-pointer hover:bg-muted/40 transition-colors">
+            <label className="flex items-center gap-3 p-3 rounded-2xl glass cursor-pointer mb-4">
               <input
                 type="checkbox"
                 checked={termsAgreed}
-                onChange={(e) => setTermsAgreed(e.target.checked)}
-                className="w-4 h-4 accent-primary cursor-pointer"
+                onChange={e => setTermsAgreed(e.target.checked)}
+                className="w-4 h-4 accent-primary"
               />
-              <span className="text-xs text-foreground font-medium">위 약관에 모두 동의합니다</span>
+              <span className="text-xs text-muted-foreground">약관에 동의합니다</span>
             </label>
-
             <button
               onClick={handleTermsAgree}
               disabled={!termsAgreed || isLoading}
-              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
-              {isLoading ? '진행 중...' : '동의하고 시작하기'}
+              {isLoading ? '가입 중...' : '가입 완료'}
             </button>
-          </div>
+            <button
+              onClick={() => {
+                setStep('nickname');
+                setTermsAgreed(false);
+              }}
+              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← 뒤로
+            </button>
+          </>
         )}
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
