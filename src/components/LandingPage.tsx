@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { COUNSELORS } from '@/data/counselors';
 import { MENUS } from '@/data/menus';
-import { Star, Gift, Sparkles, ChevronRight, X, Play } from 'lucide-react';
+import { Star, Gift, Sparkles, ChevronRight, X, Play, LogOut, User } from 'lucide-react';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
 
 interface Review {
@@ -32,15 +32,27 @@ interface MenuWithPrice {
   specialty?: string;
 }
 
+interface BannerSettings {
+  couponCode: string;
+  couponDiscount: number;
+  couponMinPrice: number;
+  couponActive: boolean;
+  couponBanner: string;
+
+  newUserDiscount: number;
+  newUserMinPrice: number;
+  newUserDiscountActive: boolean;
+  newUserBanner: string;
+}
+
 interface LandingPageProps {
-  onStartChat: (menuId?: number, counselorId?: string) => void; // ✨ counselorId 추가
+  onStartChat: (menuId?: number, counselorId?: string) => void;
   couponActive: boolean;
   userCredits: number;
   userName: string;
   onCheckCredits: () => void;
 }
 
-// 🌟 테스트 후기 3개 미리 삽입
 const SAMPLE_REVIEWS = [
   {
     masked_name: '명화 선생님',
@@ -70,7 +82,21 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const { config } = useSiteConfig();
   const [showPopup, setShowPopup] = useState(false);
 
-  // ✨ 후기 로드 (없으면 샘플 후기 사용)
+  // 🆕 배너 설정 상태
+  const [bannerSettings, setBannerSettings] = useState<BannerSettings>({
+    couponCode: 'KOKTARO',
+    couponDiscount: 3000,
+    couponMinPrice: 9900,
+    couponActive: true,
+    couponBanner: '🎟️ 쿠폰에 오신 걸 환영합니다! {{minPrice}}원 이상 구매시 {{discount}}원 할인 중',
+
+    newUserDiscount: 5000,
+    newUserMinPrice: 19000,
+    newUserDiscountActive: true,
+    newUserBanner: '🎉 신규가입자 한정! {{minPrice}}원 이상 구매시 {{discount}}원 할인!',
+  });
+
+  // ✨ 후기 로드
   useEffect(() => {
     const fetchData = async () => {
       const { data: revs, count } = await supabase
@@ -139,6 +165,46 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     };
   }, []);
 
+  // 🆕 배너 설정 실시간 로드
+  useEffect(() => {
+    const loadBannerSettings = async () => {
+      const { data } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'coupon')
+        .single();
+
+      if (data && data.value) {
+        setBannerSettings(data.value as BannerSettings);
+      }
+    };
+
+    loadBannerSettings();
+
+    // 🆕 Realtime 구독 (즉시 업데이트!)
+    const channel = supabase
+      .channel('banner-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'site_settings',
+          filter: `key=eq.coupon`,
+        },
+        (payload) => {
+          if (payload.new && payload.new.value) {
+            setBannerSettings(payload.new.value as BannerSettings);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // ✨ 진행 중인 상담 로드
   useEffect(() => {
     const loadOngoingConsults = async () => {
@@ -177,12 +243,11 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     }
   }, [config.popup_notice]);
 
-  // ✨ counselorId도 함께 넘김
   const handleStartConsult = (counselorId: string) => {
     const counselor = COUNSELORS.find(c => c.id === counselorId);
     if (counselor && counselor.menuIds.length > 0) {
       const menuId = counselor.menuIds[0];
-      onStartChat(menuId, counselorId); // ✨ counselorId 추가
+      onStartChat(menuId, counselorId);
     }
   };
 
@@ -194,15 +259,50 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     }
   };
 
+  // 🆕 배너 텍스트 포맷팅
+  const formatBannerText = (text: string, discount: number, minPrice: number) => {
+    return text
+      .replace('{{discount}}', discount.toLocaleString())
+      .replace('{{minPrice}}', minPrice.toLocaleString());
+  };
+
+  // 🆕 로그아웃
+  const handleLogout = () => {
+    localStorage.removeItem('howl_profile_id');
+    localStorage.removeItem('howl_session_id');
+    localStorage.removeItem('howl_last_auth_id');
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-svh aurora-bg">
-      {couponActive && config.banner_text && (
+      {/* 🆕 전체 할인 배너 */}
+      {bannerSettings.couponActive && (
         <motion.div
           initial={{ y: -40 }}
           animate={{ y: 0 }}
           className="sticky top-0 z-50 bg-gradient-to-r from-primary to-glow-pink text-primary-foreground text-center py-2.5 px-4 text-xs font-semibold"
         >
-          {config.banner_text}
+          {formatBannerText(
+            bannerSettings.couponBanner,
+            bannerSettings.couponDiscount,
+            bannerSettings.couponMinPrice
+          )}
+        </motion.div>
+      )}
+
+      {/* 🆕 신규 할인 배너 */}
+      {bannerSettings.newUserDiscountActive && (
+        <motion.div
+          initial={{ y: -40 }}
+          animate={{ y: 0 }}
+          className={`sticky ${bannerSettings.couponActive ? 'top-10' : 'top-0'} z-50 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-center py-2.5 px-4 text-xs font-semibold`}
+        >
+          {formatBannerText(
+            bannerSettings.newUserBanner,
+            bannerSettings.newUserDiscount,
+            bannerSettings.newUserMinPrice
+          )}
         </motion.div>
       )}
 
@@ -308,10 +408,11 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
 
       {userName && (
         <section className="px-4 pb-4">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-2xl mx-auto flex gap-3">
+            {/* 내 적립금 */}
             <button
               onClick={onCheckCredits}
-              className="w-full glass-strong rounded-2xl p-4 flex items-center justify-between glow-border hover:shadow-lg transition-all"
+              className="flex-1 glass-strong rounded-2xl p-4 flex items-center justify-between glow-border hover:shadow-lg transition-all"
             >
               <div className="flex items-center gap-3">
                 <Gift className="w-5 h-5 text-primary" />
@@ -321,6 +422,15 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
                 </div>
               </div>
               <span className="text-lg font-bold text-primary">{userCredits.toLocaleString()}원</span>
+            </button>
+
+            {/* 🆕 마이페이지 */}
+            <button
+              onClick={() => navigate('/mypage')}
+              className="px-4 py-4 rounded-2xl glass-strong glow-border hover:shadow-lg transition-all flex items-center justify-center"
+              title="마이페이지"
+            >
+              <User className="w-5 h-5 text-primary" />
             </button>
           </div>
         </section>
@@ -400,6 +510,17 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
           </p>
         </div>
       </footer>
+
+      {/* 🆕 톱니바퀴 → 로그아웃 버튼 */}
+      {userName && (
+        <button
+          onClick={handleLogout}
+          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
+          title="로그아웃"
+        >
+          <LogOut className="w-4 h-4 text-muted-foreground" />
+        </button>
+      )}
     </div>
   );
 }
