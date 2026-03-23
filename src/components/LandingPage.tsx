@@ -261,9 +261,12 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
 
   // 🆕 배너 텍스트 포맷팅
   const formatBannerText = (text: string, discount: number, minPrice: number) => {
+    // text가 없으면 replace를 실행하지 않고 빈 문자열 반환 (에러 방지)
+    if (!text) return ""; 
+    
     return text
-      .replace('{{discount}}', discount.toLocaleString())
-      .replace('{{minPrice}}', minPrice.toLocaleString());
+      .replace('{{discount}}', (discount || 0).toLocaleString())
+      .replace('{{minPrice}}', (minPrice || 0).toLocaleString());
   };
 
   // 🆕 로그아웃
