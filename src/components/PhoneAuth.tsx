@@ -21,12 +21,11 @@ interface PhoneAuthProps {
       phone_tail: string;
     } | null;
   }) => void;
-  onSkip: () => void;
   currentProfile?: { phone: string; nickname: string } | null;
   onLogout?: () => void;
 }
 
-export default function PhoneAuth({ onAuth, onSkip, currentProfile, onLogout }: PhoneAuthProps) {
+export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAuthProps) {
   const [step, setStep] = useState<'phone' | 'new_pin' | 'verify_pin' | 'nickname' | 'terms' | 'logged_in'>('phone');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -241,7 +240,9 @@ export default function PhoneAuth({ onAuth, onSkip, currentProfile, onLogout }: 
           
           <div className="space-y-3">
             <button
-              onClick={onSkip}
+              onClick={() => {
+                setStep('phone');
+              }}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all"
             >
               계속하기
