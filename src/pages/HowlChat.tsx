@@ -321,16 +321,12 @@ export default function HowlChat() {
     addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
     toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
 
-    const counselor = getCounselorForMenu(menuId);
-    const name = session.userName || userProfile?.nickname || '';
-    handleBotResponse(
-      `${name}님의 결제가 확인되었어! 이제 심층 리딩을 시작할게.`,
-      menuName,
-      true,
-      undefined,
-      counselor.id,
-      price
-    );
+    // ✨ 결제 후 상담사가 먼저 웰컴 가이드 말하기
+    setTimeout(() => {
+      const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
+      const name = session.userName || userProfile?.nickname || '';
+      addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨ 궁금한 것을 말씀해줘!`);
+    }, 800);
   };
 
   const delayedTyping = useCallback((): Promise<void> => {
@@ -515,16 +511,20 @@ export default function HowlChat() {
       return;
     }
 
-    // ✨ 테스트 모드면 모든 메뉴 결제 스킵
+    // ✨ 테스트 모드면 결제 스킵하고 상담사가 먼저 말 걸기
     if (loadSettings().testMode) {
       activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
       addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
+      setTimeout(() => {
+        const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
+        const name = session.userName || userProfile?.nickname || '';
+        addBotMessage(welcomeGuide || `${name}님, ${actualMenu.name} 상담을 시작할게요! 궁금한 것을 말씀해주세요 ✨`);
+      }, 800);
       return;
     }
 
-    addSystemMessage(`${actualMenu.icon} ${counselor.name}의 ${actualMenu.name} 상담을 시작합니다`);
-
-    MENU_WELCOME_GUIDES;
+    // ✨ 모든 메뉴 결제창 띄우기
+    setShowPayment(true);
   };
 
   const handleScanComplete = async () => {
