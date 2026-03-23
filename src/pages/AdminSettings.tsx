@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag, Plus, Trash2, X, Edit2, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
-import { MENUS } from '@/data/menus';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import SiteConfigEditor from '@/components/admin/SiteConfigEditor';
@@ -42,6 +41,20 @@ interface CouponData {
   couponActive: boolean;
 }
 
+interface DbProduct {
+  id: string;
+  menu_id: number;
+  name: string;
+  icon: string;
+  desc: string;
+  detail_desc: string;
+  price: number;
+  duration_minutes: number;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
 export default function AdminSettings() {
   const navigate = useNavigate();
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -50,6 +63,10 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState<SiteSettings>(loadSettings);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [dbProducts, setDbProducts] = useState<DbProduct[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<DbProduct | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   // 후기 관리 상태
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -147,37 +164,7 @@ export default function AdminSettings() {
 
   const handleSave = async () => {
     setIsSaving(true);
-
     saveSettings(settings);
-
-    if (activeTab === 'menus') {
-      const upsertData = MENUS.map(menu => {
-        const override = settings.menuOverrides[menu.id] || {};
-        return {
-          menu_id: menu.id,
-          name: (override.name ?? menu.name) as string,
-          icon: (override.icon ?? menu.icon) as string,
-          desc: (override.desc ?? menu.desc) as string,
-          detail_desc: (override.detailDesc ?? menu.detailDesc) as string,
-          price: (override.price ?? menu.price) as number,
-          enabled: override.enabled !== false,
-          sort_order: menu.id,
-        };
-      });
-
-      const { error } = await supabase
-        .from('products')
-        .upsert(upsertData, { onConflict: 'menu_id' });
-
-      if (error) {
-        toast.error('DB 저장 실패: ' + error.message);
-        setIsSaving(false);
-        return;
-      }
-
-      toast.success('상품 정보가 저장되었습니다! ✨');
-    }
-
     setSaved(true);
     setIsSaving(false);
     setTimeout(() => setSaved(false), 2000);
@@ -192,19 +179,6 @@ export default function AdminSettings() {
 
   const updateField = <K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const updateMenuOverride = (menuId: number, field: string, value: string | number | boolean) => {
-    setSettings(prev => ({
-      ...prev,
-      menuOverrides: {
-        ...prev.menuOverrides,
-        [menuId]: {
-          ...prev.menuOverrides[menuId],
-          [field]: value,
-        },
-      },
-    }));
   };
 
   // 후기 추가
@@ -300,34 +274,89 @@ export default function AdminSettings() {
     }
   };
 
-  useEffect(() => {
-    if (!isAuthorized) return;
-    const loadDbPrices = async () => {
-      const { data: products } = await supabase
+  // 🆕 Products 조회
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
         .from('products')
         .select('*')
         .order('sort_order');
 
-      if (products && products.length > 0) {
-        const overrides: Record<number, any> = { ...settings.menuOverrides };
-        products.forEach((p: any) => {
-          overrides[p.menu_id] = {
-            ...overrides[p.menu_id],
-            name: p.name,
-            icon: p.icon,
-            desc: p.desc,
-            detailDesc: p.detail_desc,
-            price: p.price,
-            enabled: p.enabled,
-          };
-        });
-        setSettings(prev => ({ ...prev, menuOverrides: overrides }));
+      if (error) {
+        toast.error('상품 조회 실패: ' + error.message);
+      } else {
+        setDbProducts(data || []);
       }
-    };
-    loadDbPrices();
+    } catch (err: any) {
+      toast.error('오류: ' + err.message);
+    }
+    setLoading(false);
+  };
 
+  // 🆕 Product 저장
+  const saveProduct = async () => {
+    if (!editingProduct) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          name: editingProduct.name,
+          icon: editingProduct.icon,
+          desc: editingProduct.desc,
+          detail_desc: editingProduct.detail_desc,
+          price: editingProduct.price,
+          duration_minutes: editingProduct.duration_minutes,
+          enabled: editingProduct.enabled,
+        })
+        .eq('id', editingProduct.id);
+
+      if (error) {
+        toast.error('저장 실패: ' + error.message);
+      } else {
+        toast.success('상품이 저장되었습니다! ✨');
+        setShowEditForm(false);
+        setEditingProduct(null);
+        fetchProducts();
+      }
+    } catch (err: any) {
+      toast.error('오류: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  // 🆕 Product 삭제
+  const deleteProduct = async (id: string) => {
+    if (!confirm('정말 삭제할까요?')) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        toast.error('삭제 실패: ' + error.message);
+      } else {
+        toast.success('상품이 삭제되었습니다');
+        fetchProducts();
+      }
+    } catch (err: any) {
+      toast.error('오류: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+    
     if (activeTab === 'reviews') {
       fetchReviews();
+    } else if (activeTab === 'menus') {
+      fetchProducts();
     }
   }, [isAuthorized, activeTab]);
 
@@ -415,13 +444,12 @@ export default function AdminSettings() {
           {activeTab === 'site' && <SiteConfigEditor />}
           {activeTab === 'coupons' && <CouponManagerUI />}
 
-          {/* 📝 후기 추가 섹션 */}
+          {/* 📝 후기 섹션 */}
           {activeTab === 'reviews' && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-foreground mb-4">📝 후기 추가</h2>
 
-                {/* 액션 버튼들 */}
                 <div className="flex gap-3 mb-6 flex-wrap">
                   <button
                     onClick={addSampleReviews}
@@ -447,7 +475,6 @@ export default function AdminSettings() {
                   </button>
                 </div>
 
-                {/* 개별 추가 폼 */}
                 {showAddForm && (
                   <div className="glass rounded-2xl p-6 mb-6 space-y-4">
                     <h3 className="font-semibold text-foreground">후기 추가</h3>
@@ -547,7 +574,6 @@ export default function AdminSettings() {
                   </div>
                 )}
 
-                {/* 후기 목록 */}
                 <div className="space-y-3">
                   <h3 className="font-semibold text-foreground">
                     현재 후기 ({reviews.length}개)
@@ -591,6 +617,229 @@ export default function AdminSettings() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🛍️ 상품(메뉴) 관리 - DB 기반 */}
+          {activeTab === 'menus' && (
+            <div className="space-y-5">
+              <div className="flex justify-between items-center">
+                <h2 className="font-serif text-lg font-bold text-secondary-foreground">🛍️ 상품(메뉴) 관리</h2>
+                <button
+                  onClick={fetchProducts}
+                  className="px-3 py-2 rounded-xl glass hover:bg-white/60 transition-colors text-xs font-medium"
+                >
+                  🔄 새로고침
+                </button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                각 메뉴의 이름, 설명, 아이콘, 가격, 시간을 수정하고 <strong>저장 버튼</strong>을 누르면 즉시 반영됩니다.
+              </p>
+
+              {loading && <p className="text-center text-muted-foreground">로딩 중...</p>}
+
+              {showEditForm && editingProduct && (
+                <div className="glass-strong rounded-2xl p-6 glow-border space-y-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      상품 수정: {editingProduct.name}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setShowEditForm(false);
+                        setEditingProduct(null);
+                      }}
+                      className="p-1 hover:bg-muted/50 rounded-lg"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        이름
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProduct.name}
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, name: e.target.value })
+                        }
+                        className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        아이콘 (이모지)
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProduct.icon}
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, icon: e.target.value })
+                        }
+                        className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                      한 줄 요약
+                    </label>
+                    <input
+                      type="text"
+                      value={editingProduct.desc}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, desc: e.target.value })
+                      }
+                      className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                      상세 설명
+                    </label>
+                    <textarea
+                      value={editingProduct.detail_desc}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, detail_desc: e.target.value })
+                      }
+                      className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        가격 (원)
+                      </label>
+                      <input
+                        type="number"
+                        value={editingProduct.price}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            price: parseInt(e.target.value) || 0,
+                          })
+                        }
+                        className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        시간 (분)
+                      </label>
+                      <input
+                        type="number"
+                        value={editingProduct.duration_minutes}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            duration_minutes: parseInt(e.target.value) || 0,
+                          })
+                        }
+                        className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="enabled"
+                      checked={editingProduct.enabled}
+                      onChange={(e) =>
+                        setEditingProduct({
+                          ...editingProduct,
+                          enabled: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 accent-primary"
+                    />
+                    <label htmlFor="enabled" className="text-xs font-semibold text-muted-foreground">
+                      활성화
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <button
+                      onClick={saveProduct}
+                      disabled={loading}
+                      className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                    >
+                      {loading ? '저장 중...' : '저장하기'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowEditForm(false);
+                        setEditingProduct(null);
+                      }}
+                      className="flex-1 px-4 py-2 rounded-xl glass hover:bg-white/60 transition-colors"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                {dbProducts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    상품이 없습니다 🛍️
+                  </div>
+                ) : (
+                  dbProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className={`glass rounded-2xl p-4 flex items-center justify-between transition-all ${
+                        !product.enabled ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="text-2xl">{product.icon}</span>
+                          <div>
+                            <p className="font-semibold text-foreground">
+                              {product.menu_id}번 · {product.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{product.desc}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2 ml-11">
+                          <span>💰 {product.price.toLocaleString()}원</span>
+                          <span>⏱️ {product.duration_minutes}분</span>
+                          <span>{product.enabled ? '✅ 활성화' : '❌ 비활성화'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 flex-shrink-0 ml-4">
+                        <button
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setShowEditForm(true);
+                          }}
+                          className="p-2 rounded-lg hover:bg-primary/20 transition-colors"
+                        >
+                          <Edit2 className="w-4 h-4 text-primary" />
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(product.id)}
+                          className="p-2 rounded-lg hover:bg-destructive/20 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -651,82 +900,6 @@ export default function AdminSettings() {
               <Field label="은행명" value={settings.bankName} onChange={v => updateField('bankName', v)} />
               <Field label="계좌번호" value={settings.bankAccount} onChange={v => updateField('bankAccount', v)} />
               <Field label="예금주" value={settings.bankHolder} onChange={v => updateField('bankHolder', v)} />
-            </div>
-          )}
-
-          {activeTab === 'menus' && (
-            <div className="space-y-5">
-              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🛍️ 상품(메뉴) 관리</h2>
-              <p className="text-xs text-muted-foreground">
-                각 메뉴의 이름, 설명, 아이콘, 가격을 수정하고 <strong>저장 버튼</strong>을 누르면 즉시 반영됩니다.
-              </p>
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
-                {MENUS.map(menu => {
-                  const override = settings.menuOverrides[menu.id] || {};
-                  return (
-                    <details key={menu.id} className="glass rounded-2xl overflow-hidden group">
-                      <summary className="p-3 cursor-pointer flex items-center gap-3 hover:bg-white/40 transition-colors">
-                        <span className="text-lg">{override.icon ?? menu.icon}</span>
-                        <span className="text-sm font-semibold text-foreground flex-1">
-                          {menu.id}번 · {override.name ?? menu.name}
-                        </span>
-                        <span className="text-xs font-bold text-primary">
-                          {((override.price ?? menu.price) as number).toLocaleString()}원
-                        </span>
-                      </summary>
-                      <div className="p-3 pt-0 space-y-3 border-t border-border">
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field
-                            label="메뉴명"
-                            value={(override.name ?? menu.name) as string}
-                            onChange={v => updateMenuOverride(menu.id, 'name', v)}
-                            small
-                          />
-                          <Field
-                            label="아이콘 (이모지)"
-                            value={(override.icon ?? menu.icon) as string}
-                            onChange={v => updateMenuOverride(menu.id, 'icon', v)}
-                            small
-                          />
-                        </div>
-                        <Field
-                          label="한 줄 요약"
-                          value={(override.desc ?? menu.desc) as string}
-                          onChange={v => updateMenuOverride(menu.id, 'desc', v)}
-                          small
-                        />
-                        <Field
-                          label="상세 설명"
-                          value={(override.detailDesc ?? menu.detailDesc) as string}
-                          onChange={v => updateMenuOverride(menu.id, 'detailDesc', v)}
-                          small
-                          multiline
-                        />
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1">
-                            <label className="text-[10px] text-muted-foreground font-medium mb-1 block">가격 (원)</label>
-                            <input
-                              type="number"
-                              value={override.price ?? menu.price}
-                              onChange={e => updateMenuOverride(menu.id, 'price', parseInt(e.target.value) || 0)}
-                              className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 pt-4">
-                            <label className="text-[10px] text-muted-foreground">활성화</label>
-                            <input
-                              type="checkbox"
-                              checked={override.enabled !== false}
-                              onChange={e => updateMenuOverride(menu.id, 'enabled', e.target.checked)}
-                              className="w-4 h-4 accent-primary"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
             </div>
           )}
 
@@ -859,7 +1032,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
-// 🎟️ 쿠폰 관리 UI 컴포넌트
+// 🎟️ 쿠폰 관리 UI
 interface Coupon {
   id: number;
   coupon_code: string;
@@ -873,22 +1046,11 @@ interface Coupon {
   is_active: boolean;
 }
 
-interface CouponUsage {
-  id: number;
-  coupon_id: number;
-  user_id: string;
-  user_phone: string;
-  used_at: string;
-  discount_amount: number;
-}
-
 function CouponManagerUI() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [couponUsage, setCouponUsage] = useState<CouponUsage[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [selectedCouponId, setSelectedCouponId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     coupon_code: '',
@@ -915,20 +1077,6 @@ function CouponManagerUI() {
     setLoading(false);
   };
 
-  const fetchCouponUsage = async (couponId: number) => {
-    const { data, error } = await supabase
-      .from('coupon_usage')
-      .select('*')
-      .eq('coupon_id', couponId)
-      .order('used_at', { ascending: false });
-
-    if (error) {
-      toast.error('사용 내역 조회 실패');
-    } else {
-      setCouponUsage(data || []);
-    }
-  };
-
   useEffect(() => {
     fetchCoupons();
   }, []);
@@ -936,11 +1084,6 @@ function CouponManagerUI() {
   const handleSubmit = async () => {
     if (!formData.coupon_code.trim() || !formData.coupon_name.trim() || !formData.discount_amount) {
       toast.error('필수 정보를 입력해주세요');
-      return;
-    }
-
-    if (parseInt(formData.discount_amount) <= 0) {
-      toast.error('할인금액은 0보다 커야합니다');
       return;
     }
 
@@ -997,20 +1140,6 @@ function CouponManagerUI() {
     setLoading(false);
   };
 
-  const handleEdit = (coupon: Coupon) => {
-    setEditingId(coupon.id);
-    setFormData({
-      coupon_code: coupon.coupon_code,
-      coupon_name: coupon.coupon_name,
-      discount_amount: String(coupon.discount_amount),
-      valid_until: coupon.valid_until ? coupon.valid_until.split('T')[0] : '',
-      max_uses: coupon.max_uses ? String(coupon.max_uses) : '',
-      prevent_duplicate: coupon.prevent_duplicate,
-      is_active: coupon.is_active,
-    });
-    setShowForm(true);
-  };
-
   const handleDelete = async (id: number) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
 
@@ -1025,35 +1154,6 @@ function CouponManagerUI() {
       toast.success('쿠폰이 삭제되었습니다');
       fetchCoupons();
     }
-  };
-
-  const handleToggleActive = async (id: number, current: boolean) => {
-    const { error } = await supabase
-      .from('coupons')
-      .update({ is_active: !current })
-      .eq('id', id);
-
-    if (error) {
-      toast.error('상태 변경 실패');
-    } else {
-      toast.success(!current ? '쿠폰이 활성화되었습니다' : '쿠폰이 비활성화되었습니다');
-      fetchCoupons();
-    }
-  };
-
-  const getUsagePercentage = (coupon: Coupon) => {
-    if (!coupon.max_uses) return null;
-    return Math.round((coupon.current_uses / coupon.max_uses) * 100);
-  };
-
-  const isExpired = (coupon: Coupon) => {
-    if (!coupon.valid_until) return false;
-    return new Date(coupon.valid_until) < new Date();
-  };
-
-  const isFullyUsed = (coupon: Coupon) => {
-    if (!coupon.max_uses) return false;
-    return coupon.current_uses >= coupon.max_uses;
   };
 
   return (
@@ -1087,22 +1187,11 @@ function CouponManagerUI() {
             <h3 className="text-lg font-semibold text-foreground">
               {editingId ? '쿠폰 수정' : '새 쿠폰 추가'}
             </h3>
-            <button
-              onClick={() => {
-                setShowForm(false);
-                setEditingId(null);
-              }}
-              className="p-1 hover:bg-muted/50 rounded-lg"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                쿠폰 코드 *
-              </label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">쿠폰 코드 *</label>
               <input
                 type="text"
                 value={formData.coupon_code}
@@ -1114,9 +1203,7 @@ function CouponManagerUI() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                쿠폰 이름 *
-              </label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">쿠폰 이름 *</label>
               <input
                 type="text"
                 value={formData.coupon_name}
@@ -1127,9 +1214,7 @@ function CouponManagerUI() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                할인금액 (원) *
-              </label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">할인금액 (원) *</label>
               <input
                 type="number"
                 value={formData.discount_amount}
@@ -1141,9 +1226,7 @@ function CouponManagerUI() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                유효 기한
-              </label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">유효 기한</label>
               <input
                 type="date"
                 value={formData.valid_until}
@@ -1153,9 +1236,7 @@ function CouponManagerUI() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                최대 사용 갯수
-              </label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">최대 사용 갯수</label>
               <input
                 type="number"
                 value={formData.max_uses}
@@ -1175,9 +1256,7 @@ function CouponManagerUI() {
                   onChange={(e) => setFormData({ ...formData, prevent_duplicate: e.target.checked })}
                   className="w-4 h-4 accent-primary"
                 />
-                <label htmlFor="prevent_dup" className="text-xs font-semibold text-muted-foreground">
-                  중복 사용 방지 (1인 1회)
-                </label>
+                <label htmlFor="prevent_dup" className="text-xs font-semibold text-muted-foreground">중복 방지</label>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1188,9 +1267,7 @@ function CouponManagerUI() {
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                   className="w-4 h-4 accent-primary"
                 />
-                <label htmlFor="is_active" className="text-xs font-semibold text-muted-foreground">
-                  활성화
-                </label>
+                <label htmlFor="is_active" className="text-xs font-semibold text-muted-foreground">활성화</label>
               </div>
             </div>
           </div>
@@ -1217,63 +1294,28 @@ function CouponManagerUI() {
       )}
 
       <div className="space-y-3">
-        <h3 className="font-semibold text-foreground">
-          쿠폰 목록 ({coupons.length}개)
-        </h3>
+        <h3 className="font-semibold text-foreground">쿠폰 목록 ({coupons.length}개)</h3>
 
         {coupons.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            쿠폰이 없습니다. "새 쿠폰 추가"를 눌러보세요! 🎟️
+            쿠폰이 없습니다 🎟️
           </div>
         ) : (
           <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
             {coupons.map((coupon) => (
-              <div
-                key={coupon.id}
-                className={`glass-strong rounded-2xl p-4 transition-all ${
-                  isExpired(coupon) ? 'opacity-60' : ''
-                } ${isFullyUsed(coupon) ? 'opacity-60' : ''}`}
-              >
+              <div key={coupon.id} className="glass-strong rounded-2xl p-4">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-bold text-lg text-foreground">{coupon.coupon_code}</span>
                       {!coupon.is_active && (
-                        <span className="text-xs bg-muted px-2 py-1 rounded-lg text-muted-foreground">
-                          비활성
-                        </span>
-                      )}
-                      {isExpired(coupon) && (
-                        <span className="text-xs bg-destructive/20 px-2 py-1 rounded-lg text-destructive">
-                          기한만료
-                        </span>
-                      )}
-                      {isFullyUsed(coupon) && (
-                        <span className="text-xs bg-destructive/20 px-2 py-1 rounded-lg text-destructive">
-                          소진됨
-                        </span>
+                        <span className="text-xs bg-muted px-2 py-1 rounded-lg">비활성</span>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground">{coupon.coupon_name}</p>
                   </div>
 
                   <div className="flex gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => handleToggleActive(coupon.id, coupon.is_active)}
-                      className="p-2 hover:bg-muted/50 rounded-lg transition-colors"
-                    >
-                      {coupon.is_active ? (
-                        <Eye className="w-4 h-4 text-primary" />
-                      ) : (
-                        <EyeOff className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleEdit(coupon)}
-                      className="p-2 hover:bg-muted/50 rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4 text-primary" />
-                    </button>
                     <button
                       onClick={() => handleDelete(coupon.id)}
                       className="p-2 hover:bg-destructive/20 rounded-lg transition-colors"
@@ -1283,31 +1325,11 @@ function CouponManagerUI() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="glass rounded-lg p-2">
                     <p className="text-muted-foreground">할인금액</p>
                     <p className="font-bold text-primary">{coupon.discount_amount.toLocaleString()}원</p>
                   </div>
-
-                  {coupon.max_uses ? (
-                    <div className="glass rounded-lg p-2">
-                      <p className="text-muted-foreground">사용 현황</p>
-                      <p className="font-bold">
-                        {coupon.current_uses}/{coupon.max_uses} ({getUsagePercentage(coupon)}%)
-                      </p>
-                      <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                        <div
-                          className="bg-primary h-1.5 rounded-full transition-all"
-                          style={{ width: `${getUsagePercentage(coupon)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="glass rounded-lg p-2">
-                      <p className="text-muted-foreground">사용 현황</p>
-                      <p className="font-bold">{coupon.current_uses}회 (무제한)</p>
-                    </div>
-                  )}
 
                   {coupon.valid_until && (
                     <div className="glass rounded-lg p-2">
@@ -1315,41 +1337,7 @@ function CouponManagerUI() {
                       <p className="font-bold">{new Date(coupon.valid_until).toLocaleDateString('ko-KR')}</p>
                     </div>
                   )}
-
-                  <div className="glass rounded-lg p-2">
-                    <p className="text-muted-foreground">중복 방지</p>
-                    <p className="font-bold">{coupon.prevent_duplicate ? '1인 1회' : '무제한'}</p>
-                  </div>
                 </div>
-
-                <button
-                  onClick={() => {
-                    setSelectedCouponId(selectedCouponId === coupon.id ? null : coupon.id);
-                    if (selectedCouponId !== coupon.id) {
-                      fetchCouponUsage(coupon.id);
-                    }
-                  }}
-                  className="text-xs text-primary hover:underline"
-                >
-                  {selectedCouponId === coupon.id ? '사용 내역 숨기기' : `사용 내역 보기 (${coupon.current_uses}건)`}
-                </button>
-
-                {selectedCouponId === coupon.id && couponUsage.length > 0 && (
-                  <div className="mt-3 space-y-1 max-h-40 overflow-y-auto">
-                    <p className="text-xs text-muted-foreground font-semibold mb-2">📋 사용 내역:</p>
-                    {couponUsage.map((usage) => (
-                      <div key={usage.id} className="text-xs bg-muted/30 p-2 rounded-lg">
-                        <div className="flex justify-between">
-                          <span className="font-semibold">{usage.user_phone}</span>
-                          <span className="text-muted-foreground">
-                            {new Date(usage.used_at).toLocaleDateString('ko-KR')}
-                          </span>
-                        </div>
-                        <p className="text-muted-foreground">-{usage.discount_amount.toLocaleString()}원</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </div>
