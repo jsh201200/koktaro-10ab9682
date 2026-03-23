@@ -286,12 +286,6 @@ export default function PhoneAuth({ onAuth, onSkip, currentProfile, onLogout }: 
             >
               {isLoading ? '확인 중...' : '다음'}
             </button>
-            <button
-              onClick={onSkip}
-              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              건너뛰기
-            </button>
           </>
         )}
 
