@@ -278,7 +278,7 @@ export default function HowlChat() {
   }, [session.dbSessionId, session.userName, dbProducts]);
 
   const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
-    if (menuId === 1) {
+    if (menuId === 0) {
       updateSession({
         isPaid: true,
         sessionExpiry: null,
@@ -397,7 +397,7 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 1) {
+    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
       addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
       updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
       setSessionTime(null);
@@ -499,7 +499,7 @@ export default function HowlChat() {
       counselorId: counselor.id, // ✨ 메뉴 선택 시 counselorId 저장
     });
 
-    if (menu.id === 1) {
+    if (menu.id === 0) {
       // ✨ 테스트 모드면 결제 스킵
       if (loadSettings().testMode) {
         activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
