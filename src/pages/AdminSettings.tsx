@@ -1,195 +1,484 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { MENUS, CATEGORY_LABELS, Menu } from '@/data/menus';
-import { COUNSELORS } from '@/data/counselors';
-import { X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
+import { MENUS } from '@/data/menus';
 import { supabase } from '@/integrations/supabase/client';
-import { formatElla } from '@/lib/ella';
+import { toast } from 'sonner';
+import CouponManager from '@/components/admin/CouponManager';
+import SiteConfigEditor from '@/components/admin/SiteConfigEditor';
 
-interface MenuGridProps {
-  onSelect: (menu: Menu) => void;
-  onClose: () => void;
-  counselorId?: string; // ✨ 상담사 ID 받기
-}
+type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'messages' | 'security' | 'coupons' | 'site';
 
-interface MenuWithPrice extends Menu {
-  price: number;
-  name: string;
-}
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'site', label: '사이트 설정', icon: <Globe className="w-4 h-4" /> },
+  { id: 'coupons', label: '쿠폰/이벤트', icon: <Tag className="w-4 h-4" /> },
+  { id: 'branding', label: '브랜딩', icon: <Type className="w-4 h-4" /> },
+  { id: 'colors', label: '배경/색상', icon: <Palette className="w-4 h-4" /> },
+  { id: 'links', label: '링크 연결', icon: <Link2 className="w-4 h-4" /> },
+  { id: 'payment', label: '결제 정보', icon: <CreditCard className="w-4 h-4" /> },
+  { id: 'menus', label: '상품 관리', icon: <ShoppingBag className="w-4 h-4" /> },
+  { id: 'legal', label: '법적 고지', icon: <FileText className="w-4 h-4" /> },
+  { id: 'messages', label: '메시지', icon: <MessageCircle className="w-4 h-4" /> },
+  { id: 'security', label: '보안', icon: <Shield className="w-4 h-4" /> },
+];
 
-function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuWithPrice) => void }) {
-  const [isFlipped, setIsFlipped] = useState(false);
-  const isSnack = menu.isSnack;
+export default function AdminSettings() {
+  const navigate = useNavigate();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [password, setPassword] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('branding');
+  const [settings, setSettings] = useState<SiteSettings>(loadSettings);
+  const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handlePasswordCheck = (val: string) => {
+    setPassword(val);
+    const s = loadSettings();
+    if (val === s.adminPassword) {
+      setIsAuthorized(true);
+    }
+  };
+
+  // ✨ 저장 시 localStorage + Supabase DB 동시 저장
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    // 1. localStorage에 저장 (기존 방식)
+    saveSettings(settings);
+
+    // 2. 상품 관리 탭이면 Supabase DB에도 반영
+    if (activeTab === 'menus') {
+      const upsertData = MENUS.map(menu => {
+        const override = settings.menuOverrides[menu.id] || {};
+        return {
+          menu_id: menu.id,
+          name: (override.name ?? menu.name) as string,
+          icon: (override.icon ?? menu.icon) as string,
+          desc: (override.desc ?? menu.desc) as string,
+          detail_desc: (override.detailDesc ?? menu.detailDesc) as string,
+          price: (override.price ?? menu.price) as number,
+          enabled: override.enabled !== false,
+          sort_order: menu.id,
+        };
+      });
+
+      const { error } = await supabase
+        .from('products')
+        .upsert(upsertData, { onConflict: 'menu_id' });
+
+      if (error) {
+        toast.error('DB 저장 실패: ' + error.message);
+        setIsSaving(false);
+        return;
+      }
+
+      toast.success('상품 정보가 저장되었습니다! ✨');
+    }
+
+    setSaved(true);
+    setIsSaving(false);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleReset = () => {
+    if (confirm('모든 설정을 초기값으로 되돌리시겠습니까?')) {
+      resetSettings();
+      setSettings(DEFAULT_SETTINGS);
+    }
+  };
+
+  const updateField = <K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateMenuOverride = (menuId: number, field: string, value: string | number | boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      menuOverrides: {
+        ...prev.menuOverrides,
+        [menuId]: {
+          ...prev.menuOverrides[menuId],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  // ✨ 페이지 진입 시 DB에서 현재 가격 불러와서 settings에 반영
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const loadDbPrices = async () => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+        .order('sort_order');
+
+      if (products && products.length > 0) {
+        const overrides: Record<number, any> = { ...settings.menuOverrides };
+        products.forEach((p: any) => {
+          overrides[p.menu_id] = {
+            ...overrides[p.menu_id],
+            name: p.name,
+            icon: p.icon,
+            desc: p.desc,
+            detailDesc: p.detail_desc,
+            price: p.price,
+            enabled: p.enabled,
+          };
+        });
+        setSettings(prev => ({ ...prev, menuOverrides: overrides }));
+      }
+    };
+    loadDbPrices();
+  }, [isAuthorized]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="glass-strong rounded-3xl p-8 max-w-sm w-full text-center glow-border"
+        >
+          <span className="text-4xl mb-4 block">⚙️</span>
+          <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-4">관리자 설정</h2>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => handlePasswordCheck(e.target.value)}
+            className="w-full p-3 rounded-2xl glass text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="비밀번호 입력"
+            autoFocus
+          />
+          <p className="text-xs text-muted-foreground mt-3">관리자 비밀번호를 입력하세요</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`perspective-1000 cursor-pointer ${isSnack ? 'h-36' : 'h-44'}`}
-      onMouseEnter={() => setIsFlipped(true)}
-      onMouseLeave={() => setIsFlipped(false)}
-      onClick={() => setIsFlipped(!isFlipped)}
-    >
-      <motion.div
-        animate={{ rotateY: isFlipped ? 180 : 0 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-        className="relative w-full h-full transform-style-3d"
-      >
-        {/* Front */}
-        <div
-          className={`absolute inset-0 backface-hidden rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
-            isSnack
-              ? 'bg-gradient-to-br from-yellow-50/80 to-pink-50/80 border-2 border-dashed border-primary/30 shadow-[0_0_12px_rgba(var(--primary-rgb),0.15)]'
-              : 'glass glow-border'
-          }`}
-        >
-          <span className={`mb-1.5 ${isSnack ? 'text-3xl animate-bounce' : 'text-2xl'}`}>
-            {menu.icon}
-          </span>
-          {isSnack && (
-            <span className="text-[9px] text-primary font-bold tracking-wider mb-0.5 bg-primary/10 px-2 py-0.5 rounded-full">
-              🌟 NEW
-            </span>
-          )}
-          <h3 className={`font-semibold text-foreground ${isSnack ? 'text-xs' : 'text-sm'}`}>{menu.name}</h3>
-          <p className="text-[10px] text-muted-foreground mt-1 leading-tight px-1">{menu.desc}</p>
-          {isSnack && (
-            <span className="mt-1 text-[10px] font-bold text-primary">{formatElla(menu.price)}</span>
-          )}
+    <div className="min-h-svh aurora-bg">
+      <header className="sticky top-0 z-50 glass px-4 py-3 sm:px-6">
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/admin')} className="p-2 rounded-xl hover:bg-white/50 transition-colors">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div>
+              <h1 className="font-serif text-lg font-bold text-secondary-foreground">⚙️ 관리자 설정</h1>
+              <p className="text-[10px] text-muted-foreground">사이트 전체 커스터마이징</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleReset}
+              className="px-3 py-2 rounded-xl glass text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/60 transition-colors flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" /> 초기화
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:shadow-lg transition-all active:scale-95 flex items-center gap-1 disabled:opacity-70"
+            >
+              <Save className="w-3 h-3" /> {isSaving ? '저장 중...' : saved ? '✅ 저장됨!' : '저장'}
+            </button>
+          </div>
         </div>
+      </header>
 
-        {/* Back */}
-        <div
-          className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center border border-primary/20 ${
-            isSnack ? 'bg-gradient-to-br from-primary/40 to-purple-900/90' : 'glass-strong'
-          }`}
+      <div className="max-w-5xl mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-4">
+        <nav className="lg:w-48 flex-shrink-0">
+          <div className="flex lg:flex-col gap-1 overflow-x-auto scrollbar-hide">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'glass hover:bg-white/60 text-foreground'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 glass-strong rounded-3xl p-5 sm:p-6 glow-border"
         >
-          <span className="text-[9px] text-white/70 mb-1">{menu.categoryName}</span>
-          <span className="text-lg font-bold text-white mb-1">
-            {formatElla(menu.price)}
-          </span>
-          <p className="text-[10px] text-white/90 mb-3 px-2 leading-tight">{menu.detailDesc}</p>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect(menu);
-            }}
-            className="px-4 py-1.5 bg-white text-primary text-xs rounded-full font-semibold shadow-md hover:shadow-lg transition-all active:scale-95"
-          >
-            상담 시작하기
-          </button>
-        </div>
-      </motion.div>
+          {activeTab === 'site' && <SiteConfigEditor />}
+          {activeTab === 'coupons' && <CouponManager />}
+
+          {activeTab === 'branding' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🏷️ 브랜딩</h2>
+              <Field label="사이트 이름" value={settings.siteName} onChange={v => updateField('siteName', v)} />
+              <Field label="부제목" value={settings.siteSubtitle} onChange={v => updateField('siteSubtitle', v)} />
+              <Field label="로고 이미지 URL" value={settings.logoUrl} onChange={v => updateField('logoUrl', v)} placeholder="비워두면 기본 프로필 사용" />
+              <Field label="본문 폰트" value={settings.fontBody} onChange={v => updateField('fontBody', v)} />
+              <Field label="제목 폰트 (Serif)" value={settings.fontSerif} onChange={v => updateField('fontSerif', v)} />
+              {settings.logoUrl && (
+                <div className="flex items-center gap-3 p-3 glass rounded-2xl">
+                  <img src={settings.logoUrl} alt="logo preview" className="w-12 h-12 rounded-full object-cover" />
+                  <span className="text-xs text-muted-foreground">로고 미리보기</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'colors' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🎨 배경 / 색상</h2>
+              <p className="text-xs text-muted-foreground">오로라 그라데이션 배경 색상을 커스터마이징합니다.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <ColorField label="그라데이션 시작" value={settings.bgGradientStart} onChange={v => updateField('bgGradientStart', v)} />
+                <ColorField label="그라데이션 중간 1" value={settings.bgGradientMid1} onChange={v => updateField('bgGradientMid1', v)} />
+                <ColorField label="그라데이션 중간 2" value={settings.bgGradientMid2} onChange={v => updateField('bgGradientMid2', v)} />
+                <ColorField label="그라데이션 끝" value={settings.bgGradientEnd} onChange={v => updateField('bgGradientEnd', v)} />
+                <ColorField label="기본 강조색 (Primary)" value={settings.primaryColor} onChange={v => updateField('primaryColor', v)} />
+              </div>
+              <div
+                className="h-24 rounded-2xl shadow-inner border border-white/30"
+                style={{
+                  background: `linear-gradient(135deg, ${settings.bgGradientStart} 0%, ${settings.bgGradientMid1} 35%, ${settings.bgGradientMid2} 65%, ${settings.bgGradientEnd} 100%)`,
+                }}
+              >
+                <div className="h-full flex items-center justify-center text-xs font-medium" style={{ color: settings.primaryColor }}>
+                  배경 미리보기
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'links' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🔗 링크 연결</h2>
+              <Field label="카카오페이 링크" value={settings.kakaoPayLink} onChange={v => updateField('kakaoPayLink', v)} />
+              <Field label="카카오 채널 링크" value={settings.kakaoChannelLink} onChange={v => updateField('kakaoChannelLink', v)} />
+              <Field label="Discord 웹훅 URL" value={settings.discordWebhook} onChange={v => updateField('discordWebhook', v)} placeholder="알림 수신용" />
+            </div>
+          )}
+
+          {activeTab === 'payment' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">💳 결제 정보</h2>
+              <Field label="은행명" value={settings.bankName} onChange={v => updateField('bankName', v)} />
+              <Field label="계좌번호" value={settings.bankAccount} onChange={v => updateField('bankAccount', v)} />
+              <Field label="예금주" value={settings.bankHolder} onChange={v => updateField('bankHolder', v)} />
+            </div>
+          )}
+
+          {activeTab === 'menus' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🛍️ 상품(메뉴) 관리</h2>
+              <p className="text-xs text-muted-foreground">
+                각 메뉴의 이름, 설명, 아이콘, 가격을 수정하고 <strong>저장 버튼</strong>을 누르면 즉시 반영됩니다.
+              </p>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
+                {MENUS.map(menu => {
+                  const override = settings.menuOverrides[menu.id] || {};
+                  return (
+                    <details key={menu.id} className="glass rounded-2xl overflow-hidden group">
+                      <summary className="p-3 cursor-pointer flex items-center gap-3 hover:bg-white/40 transition-colors">
+                        <span className="text-lg">{override.icon ?? menu.icon}</span>
+                        <span className="text-sm font-semibold text-foreground flex-1">
+                          {menu.id}번 · {override.name ?? menu.name}
+                        </span>
+                        <span className="text-xs font-bold text-primary">
+                          {((override.price ?? menu.price) as number).toLocaleString()}원
+                        </span>
+                      </summary>
+                      <div className="p-3 pt-0 space-y-3 border-t border-border">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field
+                            label="메뉴명"
+                            value={(override.name ?? menu.name) as string}
+                            onChange={v => updateMenuOverride(menu.id, 'name', v)}
+                            small
+                          />
+                          <Field
+                            label="아이콘 (이모지)"
+                            value={(override.icon ?? menu.icon) as string}
+                            onChange={v => updateMenuOverride(menu.id, 'icon', v)}
+                            small
+                          />
+                        </div>
+                        <Field
+                          label="한 줄 요약"
+                          value={(override.desc ?? menu.desc) as string}
+                          onChange={v => updateMenuOverride(menu.id, 'desc', v)}
+                          small
+                        />
+                        <Field
+                          label="상세 설명"
+                          value={(override.detailDesc ?? menu.detailDesc) as string}
+                          onChange={v => updateMenuOverride(menu.id, 'detailDesc', v)}
+                          small
+                          multiline
+                        />
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <label className="text-[10px] text-muted-foreground font-medium mb-1 block">가격 (원)</label>
+                            <input
+                              type="number"
+                              value={override.price ?? menu.price}
+                              onChange={e => updateMenuOverride(menu.id, 'price', parseInt(e.target.value) || 0)}
+                              className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 pt-4">
+                            <label className="text-[10px] text-muted-foreground">활성화</label>
+                            <input
+                              type="checkbox"
+                              checked={override.enabled !== false}
+                              onChange={e => updateMenuOverride(menu.id, 'enabled', e.target.checked)}
+                              className="w-4 h-4 accent-primary"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'legal' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">📜 법적 고지</h2>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium mb-1 block">면책 조항</label>
+                <textarea
+                  value={settings.disclaimerText}
+                  onChange={e => updateField('disclaimerText', e.target.value)}
+                  className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium mb-1 block">환불 규정</label>
+                <textarea
+                  value={settings.refundPolicy}
+                  onChange={e => updateField('refundPolicy', e.target.value)}
+                  className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'messages' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">💬 메시지 설정</h2>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium mb-1 block">첫 인사 메시지</label>
+                <textarea
+                  value={settings.welcomeMessage}
+                  onChange={e => updateField('welcomeMessage', e.target.value)}
+                  className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                  rows={4}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'security' && (
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-bold text-secondary-foreground">🔒 보안</h2>
+              <Field
+                label="관리자 비밀번호"
+                value={settings.adminPassword}
+                onChange={v => updateField('adminPassword', v)}
+                type="password"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                이 비밀번호는 관리자 대시보드(/admin), 관리자 설정, 채팅 승인 단축키에 사용됩니다.
+              </p>
+
+              {/* ✨ 테스트 모드 토글 */}
+              <div className="glass rounded-2xl p-4 border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">🧪 테스트 모드</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      켜두면 결제 없이 모든 상담 바로 시작 가능
+                    </p>
+                    {settings.testMode && (
+                      <p className="text-[10px] text-destructive font-semibold mt-1">
+                        ⚠️ 현재 테스트 모드 ON — 실제 서비스 전에 꼭 끄세요!
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => updateField('testMode', !settings.testMode)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      settings.testMode ? 'bg-primary' : 'bg-muted'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      settings.testMode ? 'translate-x-7' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
     </div>
   );
 }
 
-export default function MenuGrid({ onSelect, onClose, counselorId }: MenuGridProps) {
-  const [menusWithPrices, setMenusWithPrices] = useState<MenuWithPrice[]>([]);
-
-  // ✨ DB에서 실시간 가격 fetch
-  useEffect(() => {
-    const loadMenusWithPrices = async () => {
-      const { data: products } = await supabase
-        .from('products')
-        .select('*')
-        .eq('enabled', true)
-        .order('sort_order');
-
-      if (products) {
-        const merged = MENUS.map(menu => {
-          const product = products.find((p: any) => p.menu_id === menu.id);
-          return {
-            ...menu,
-            name: product?.name || menu.name,
-            price: product?.price || menu.price,
-          } as MenuWithPrice;
-        });
-        setMenusWithPrices(merged);
-      } else {
-        setMenusWithPrices(MENUS.map(m => ({ ...m, price: m.price } as MenuWithPrice)));
-      }
-    };
-
-    loadMenusWithPrices();
-
-    const channel = supabase
-      .channel('products-changes-menu')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
-        () => {
-          loadMenusWithPrices();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // ✨ 상담사별 메뉴 필터링
-  const getFilteredMenus = () => {
-    if (!counselorId) return menusWithPrices;
-    const counselor = COUNSELORS.find(c => c.id === counselorId);
-    if (!counselor) return menusWithPrices;
-    return menusWithPrices.filter(m => counselor.menuIds.includes(m.id));
-  };
-
-  const filteredMenus = getFilteredMenus();
-  const currentCounselor = counselorId ? COUNSELORS.find(c => c.id === counselorId) : null;
-
-  // ✨ 카테고리별 그룹핑 (상담사 필터 적용된 것만)
-  const categories = ['A', 'B', 'C', 'D'] as const;
-  const hasCategory = (cat: string) => filteredMenus.some(m => m.category === cat);
-
+function Field({ label, value, onChange, placeholder, type, small, multiline }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  small?: boolean;
+  multiline?: boolean;
+}) {
+  const cls = `w-full p-${small ? '2' : '2.5'} rounded-xl glass text-${small ? 'xs' : 'sm'} focus:outline-none focus:ring-2 focus:ring-primary/30`;
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] aurora-bg overflow-y-auto scrollbar-hide"
-    >
-      <div className="max-w-3xl mx-auto px-4 pt-16 pb-8">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="font-serif text-xl font-bold text-secondary-foreground">
-              {currentCounselor ? `${currentCounselor.name}의 상담 메뉴` : '✨ 상담 메뉴'}
-            </h2>
-            {currentCounselor && (
-              <p className="text-xs text-muted-foreground mt-0.5">{currentCounselor.specialty} 전문</p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="glass rounded-full p-2 hover:bg-white/60 transition-colors active:scale-95"
-          >
-            <X className="w-5 h-5 text-foreground" />
-          </button>
-        </div>
+    <div>
+      <label className={`text-${small ? '[10px]' : 'xs'} text-muted-foreground font-medium mb-1 block`}>{label}</label>
+      {multiline ? (
+        <textarea value={value} onChange={e => onChange(e.target.value)} className={`${cls} resize-none`} rows={2} placeholder={placeholder} />
+      ) : (
+        <input type={type || 'text'} value={value} onChange={e => onChange(e.target.value)} className={cls} placeholder={placeholder} />
+      )}
+    </div>
+  );
+}
 
-        {categories.map((cat) => {
-          if (!hasCategory(cat)) return null;
-          const items = filteredMenus.filter((m) => m.category === cat);
-          return (
-            <div key={cat} className="mb-6">
-              <h3 className="text-xs font-bold text-primary tracking-wider uppercase mb-3 pl-1">
-                {CATEGORY_LABELS[cat]}
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {items.map((menu) => (
-                  <FlipCard key={menu.id} menu={menu} onSelect={onSelect} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {filteredMenus.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground text-sm">
-            준비된 메뉴가 없습니다
-          </div>
-        )}
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="text-[10px] text-muted-foreground font-medium mb-1 block">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-8 h-8 rounded-lg border-0 cursor-pointer"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="flex-1 p-2 rounded-xl glass text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+        />
       </div>
-    </motion.div>
+    </div>
   );
 }
