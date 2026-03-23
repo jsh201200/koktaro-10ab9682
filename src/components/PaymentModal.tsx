@@ -11,7 +11,7 @@ interface PaymentModalProps {
   menu: Menu;
   userName: string;
   onClose: () => void;
-  onPaymentSubmit: (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => void;
+  onPaymentSubmit: (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string, discountType: string, couponId?: number) => void;
   couponActive?: boolean;
   couponCode?: string;
   couponDiscount?: number;
@@ -20,6 +20,18 @@ interface PaymentModalProps {
 
 interface MenuWithPrice extends Menu {
   price: number;
+}
+
+interface Coupon {
+  id: number;
+  coupon_code: string;
+  coupon_name: string;
+  discount_amount: number;
+  valid_until: string | null;
+  max_uses: number | null;
+  current_uses: number;
+  prevent_duplicate: boolean;
+  is_active: boolean;
 }
 
 export default function PaymentModal({ 
@@ -35,8 +47,11 @@ export default function PaymentModal({
   const [step, setStep] = useState<'select' | 'bank'>('select');
   const [depositor, setDepositor] = useState(userName);
   const [phoneTail, setPhoneTail] = useState('');
-  const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits' | 'urlcoupon'>('none');
+  const [discountType, setDiscountType] = useState<'none' | 'coupon' | 'credits' | 'urlcoupon' | 'dbcoupon'>('none');
+  const [selectedCouponId, setSelectedCouponId] = useState<number | null>(null);
   const [menuWithPrice, setMenuWithPrice] = useState<MenuWithPrice>(menu as MenuWithPrice);
+  const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([]);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
   const s = loadSettings();
   const [searchParams] = useSearchParams();
 
@@ -44,6 +59,7 @@ export default function PaymentModal({
   const hasUrlCoupon = urlCoupon === 'KOKK3000' || urlCoupon === 'HOWL3000';
   const URL_COUPON_DISCOUNT = 3000;
 
+  // 메뉴 가격 로드
   useEffect(() => {
     const loadMenuPrice = async () => {
       const { data: product } = await supabase
@@ -76,18 +92,66 @@ export default function PaymentModal({
     return () => { supabase.removeChannel(channel); };
   }, [menu.id, menu]);
 
+  // 사용 가능한 쿠폰 로드
+  useEffect(() => {
+    const fetchAvailableCoupons = async () => {
+      setLoadingCoupons(true);
+      const now = new Date();
+
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('쿠폰 로드 실패:', error);
+        setLoadingCoupons(false);
+        return;
+      }
+
+      // 필터링: 사용 가능한 쿠폰만
+      const filtered = (data || []).filter(coupon => {
+        // 최소 금액 체크
+        if (menuWithPrice.price < 9900) return false;
+        
+        // 기한 체크
+        if (coupon.valid_until && new Date(coupon.valid_until) < now) return false;
+        
+        // 갯수 체크
+        if (coupon.max_uses && coupon.current_uses >= coupon.max_uses) return false;
+
+        return true;
+      });
+
+      setAvailableCoupons(filtered);
+      setLoadingCoupons(false);
+    };
+
+    fetchAvailableCoupons();
+  }, [menuWithPrice.price]);
+
   const canUseCoupon = couponActive && couponCode && menuWithPrice.price >= 9900;
   const canUseCredits = userCredits > 0 && menuWithPrice.price >= 9900;
   const canUseUrlCoupon = hasUrlCoupon && menuWithPrice.price >= 9900;
+  const canUseDbCoupon = availableCoupons.length > 0;
 
   let finalPrice = menuWithPrice.price;
   let discountAmount = 0;
   let discountLabel = '';
+  let selectedCoupon: Coupon | null = null;
 
   if (discountType === 'coupon' && canUseCoupon) {
     discountAmount = couponDiscount;
     finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
     discountLabel = `쿠폰 '${couponCode}' ${formatElla(discountAmount)} 할인`;
+  } else if (discountType === 'dbcoupon' && selectedCouponId && canUseDbCoupon) {
+    selectedCoupon = availableCoupons.find(c => c.id === selectedCouponId) || null;
+    if (selectedCoupon) {
+      discountAmount = selectedCoupon.discount_amount;
+      finalPrice = Math.max(0, menuWithPrice.price - discountAmount);
+      discountLabel = `쿠폰 '${selectedCoupon.coupon_code}' ${formatElla(discountAmount)} 할인`;
+    }
   } else if (discountType === 'credits' && canUseCredits) {
     discountAmount = Math.min(userCredits, menuWithPrice.price);
     finalPrice = menuWithPrice.price - discountAmount;
@@ -100,7 +164,11 @@ export default function PaymentModal({
 
   const handleKakaoPay = () => {
     window.open(s.kakaoPayLink, '_blank');
-    onPaymentSubmit('kakaopay', depositor || userName, phoneTail);
+    onPaymentSubmit('kakaopay', depositor || userName, phoneTail, discountType, selectedCouponId || undefined);
+  };
+
+  const handleBankSubmit = () => {
+    onPaymentSubmit('bank', depositor || userName, phoneTail, discountType, selectedCouponId || undefined);
   };
 
   return (
@@ -145,6 +213,14 @@ export default function PaymentModal({
               </div>
             )}
 
+            {canUseDbCoupon && (
+              <div className="mt-2 px-2 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                <p className="text-xs text-blue-400 font-semibold">
+                  🎟️ 사용 가능한 쿠폰이 {availableCoupons.length}개 있어요!
+                </p>
+              </div>
+            )}
+
             {/* ✨ 엘라 + 원화 동시 표시 */}
             <p className="text-2xl font-bold text-primary mt-3">
               {formatEllaWithWon(finalPrice)}
@@ -162,7 +238,7 @@ export default function PaymentModal({
             )}
           </div>
 
-          {(canUseCoupon || canUseCredits || canUseUrlCoupon) && (
+          {(canUseCoupon || canUseDbCoupon || canUseCredits || canUseUrlCoupon) && (
             <div className="mb-4 space-y-2">
               <p className="text-xs font-semibold text-foreground">💝 할인 혜택 (택 1)</p>
               
@@ -188,6 +264,44 @@ export default function PaymentModal({
                     <p className="text-[10px] text-muted-foreground">자동 적용</p>
                   </div>
                 </label>
+              )}
+
+              {canUseDbCoupon && (
+                <div className={`p-2.5 rounded-xl glass transition-all ${discountType === 'dbcoupon' ? 'ring-2 ring-primary' : ''}`}>
+                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                    <input type="radio" name="discount" checked={discountType === 'dbcoupon'} onChange={() => setDiscountType('dbcoupon')} className="accent-primary" />
+                    <p className="text-xs font-semibold text-foreground">🎟️ 보유 쿠폰 선택</p>
+                  </label>
+                  
+                  {discountType === 'dbcoupon' && (
+                    <div className="space-y-1.5 ml-6">
+                      {availableCoupons.map((coupon) => (
+                        <label key={coupon.id} className="flex items-start gap-2 p-1.5 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors">
+                          <input
+                            type="radio"
+                            name="selectedCoupon"
+                            checked={selectedCouponId === coupon.id}
+                            onChange={() => setSelectedCouponId(coupon.id)}
+                            className="accent-primary mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate">
+                              {coupon.coupon_code} ({coupon.coupon_name})
+                            </p>
+                            <p className="text-[10px] text-green-500 font-bold">
+                              -{formatElla(coupon.discount_amount)}
+                            </p>
+                            {coupon.valid_until && (
+                              <p className="text-[9px] text-muted-foreground">
+                                기한: {new Date(coupon.valid_until).toLocaleDateString('ko-KR')}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
               {canUseCredits && (
@@ -272,7 +386,7 @@ export default function PaymentModal({
                 )}
               </div>
               <button
-                onClick={() => onPaymentSubmit('bank', depositor || userName, phoneTail)}
+                onClick={handleBankSubmit}
                 className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
               >
                 입금 완료 확인 요청
