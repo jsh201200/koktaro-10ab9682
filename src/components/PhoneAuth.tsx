@@ -267,12 +267,7 @@ export default function PhoneAuth({ onAuth, onSkip }: PhoneAuthProps) {
             >
               {isLoading ? '확인 중...' : '다음'}
             </button>
-            <button
-              onClick={onSkip}
-              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              번호 없이 시작하기
-            </button>
+      
           </div>
         )}
 
