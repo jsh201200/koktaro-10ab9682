@@ -98,9 +98,9 @@ export default function MyPage() {
 
         // 2️⃣ 상담 내역 (3일 이내)
         const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: sessions } = await supabase
-          .from('chat_sessions')
-          .select('*')
+       const { data: sessions } = await supabase
+  .from('chat_sessions')
+  .select('id, created_at, user_nickname, profile_id')
           .eq('profile_id', profileId)
           .gte('created_at', threeDaysAgo)
           .order('created_at', { ascending: false });
