@@ -83,7 +83,6 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
       toast.error('4자리 숫자를 입력해주세요');
       return;
     }
-
     setStep('nickname');
   };
 
@@ -107,12 +106,10 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
       return;
     }
 
-    // ✅ 세션 초기화
     localStorage.removeItem('howl_session_id');
     const newSessionId = `session_${Date.now()}_${Math.random()}`;
     localStorage.setItem('howl_session_id', newSessionId);
 
-    // 승인된 결제 조회
     const { data: payments } = await supabase
       .from('payments')
       .select('*')
@@ -147,17 +144,14 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
       toast.error('닉네임을 입력해주세요');
       return;
     }
-
     if (nickname.length > 20) {
       toast.error('닉네임은 20자 이내로 입력해주세요');
       return;
     }
-
     if (pin.length !== 4 || isNaN(Number(pin))) {
       toast.error('4자리 숫자 비밀번호를 입력해주세요');
       return;
     }
-
     setStep('terms');
   };
 
@@ -166,11 +160,8 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
       toast.error('약관에 동의해주세요');
       return;
     }
-
     setIsLoading(true);
     const cleanPhone = phone.replace(/-/g, '');
-
-    // ✅ 세션 초기화
     localStorage.removeItem('howl_session_id');
     const newSessionId = `session_${Date.now()}_${Math.random()}`;
     localStorage.setItem('howl_session_id', newSessionId);
@@ -223,7 +214,6 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
     toast.info('로그아웃되었습니다 ✨');
   };
 
-  // 🔐 현재 로그인 상태 표시
   if (currentProfile && step === 'logged_in') {
     return (
       <div className="min-h-svh aurora-bg flex items-center justify-center p-4">
@@ -237,17 +227,13 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
           <p className="text-sm text-muted-foreground mb-6">
             {currentProfile.nickname}님 ({currentProfile.phone})
           </p>
-          
           <div className="space-y-3">
             <button
-              onClick={() => {
-                setStep('phone');
-              }}
+              onClick={() => setStep('phone')}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all"
             >
               계속하기
             </button>
-            
             <button
               onClick={handleLogout}
               className="w-full py-3 rounded-2xl glass text-foreground font-semibold text-sm hover:bg-muted/70 transition-all flex items-center justify-center gap-2"
@@ -269,7 +255,7 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
         className="glass-strong rounded-3xl p-8 max-w-sm w-full text-center glow-border"
       >
         {step === 'phone' && (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); handlePhoneSubmit(); }}>
             <span className="text-4xl mb-4 block">📞</span>
             <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">휴대폰 번호</h2>
             <input
@@ -279,19 +265,20 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
               placeholder="010-0000-0000"
               className="w-full p-3 rounded-2xl glass text-center text-lg tracking-wider focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
               maxLength={13}
+              autoFocus
             />
             <button
-              onClick={handlePhoneSubmit}
+              type="submit"
               disabled={!isValidPhone(phone) || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               {isLoading ? '확인 중...' : '다음'}
             </button>
-          </>
+          </form>
         )}
 
         {step === 'new_pin' && (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); handleNewPinSubmit(); }}>
             <span className="text-4xl mb-4 block">🔐</span>
             <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-2">4자리 비밀번호 설정</h2>
             <p className="text-xs text-muted-foreground mb-6">숫자 4개를 조합해주세요</p>
@@ -302,29 +289,23 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
               placeholder="0000"
               className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
               maxLength={4}
+              autoFocus
             />
             <button
-              onClick={handleNewPinSubmit}
+              type="submit"
               disabled={pin.length !== 4}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               다음
             </button>
-            <button
-              onClick={() => {
-                setStep('phone');
-                setPhone('');
-                setPin('');
-              }}
-              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button type="button" onClick={() => { setStep('phone'); setPhone(''); setPin(''); }} className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors">
               ← 뒤로
             </button>
-          </>
+          </form>
         )}
 
         {step === 'verify_pin' && (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); handleVerifyPin(); }}>
             <span className="text-4xl mb-4 block">🔐</span>
             <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-2">비밀번호 확인</h2>
             <p className="text-xs text-muted-foreground mb-6">4자리 비밀번호를 입력해주세요</p>
@@ -335,30 +316,23 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
               placeholder="0000"
               className="w-full p-3 rounded-2xl glass text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
               maxLength={4}
+              autoFocus
             />
             <button
-              onClick={handleVerifyPin}
+              type="submit"
               disabled={pin.length !== 4 || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               {isLoading ? '확인 중...' : '로그인'}
             </button>
-            <button
-              onClick={() => {
-                setStep('phone');
-                setPhone('');
-                setPin('');
-                setPinFailCount(0);
-              }}
-              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button type="button" onClick={() => { setStep('phone'); setPhone(''); setPin(''); setPinFailCount(0); }} className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors">
               ← 뒤로
             </button>
-          </>
+          </form>
         )}
 
         {step === 'nickname' && (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); handleCreateProfile(); }}>
             <span className="text-4xl mb-4 block">✨</span>
             <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">닉네임 설정</h2>
             <input
@@ -368,29 +342,24 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
               placeholder="닉네임 입력"
               className="w-full p-3 rounded-2xl glass text-center focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
               maxLength={20}
+              autoFocus
             />
             <p className="text-xs text-muted-foreground mb-4">{nickname.length}/20</p>
             <button
-              onClick={handleCreateProfile}
+              type="submit"
               disabled={!nickname.trim() || pin.length !== 4}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               다음
             </button>
-            <button
-              onClick={() => {
-                setStep('new_pin');
-                setNickname('');
-              }}
-              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button type="button" onClick={() => { setStep('new_pin'); setNickname(''); }} className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors">
               ← 뒤로
             </button>
-          </>
+          </form>
         )}
 
         {step === 'terms' && (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); handleTermsAgree(); }}>
             <span className="text-4xl mb-4 block">📋</span>
             <h2 className="font-serif text-xl font-bold text-secondary-foreground mb-6">약관 동의</h2>
             <div className="bg-muted/30 rounded-2xl p-4 max-h-40 overflow-y-auto mb-4 text-left">
@@ -412,22 +381,16 @@ export default function PhoneAuth({ onAuth, currentProfile, onLogout }: PhoneAut
               <span className="text-xs text-muted-foreground">약관에 동의합니다</span>
             </label>
             <button
-              onClick={handleTermsAgree}
+              type="submit"
               disabled={!termsAgreed || isLoading}
               className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold hover:shadow-lg transition-all disabled:opacity-50"
             >
               {isLoading ? '가입 중...' : '가입 완료'}
             </button>
-            <button
-              onClick={() => {
-                setStep('nickname');
-                setTermsAgreed(false);
-              }}
-              className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button type="button" onClick={() => { setStep('nickname'); setTermsAgreed(false); }} className="w-full mt-3 py-2 rounded-2xl text-xs text-muted-foreground hover:text-foreground transition-colors">
               ← 뒤로
             </button>
-          </>
+          </form>
         )}
       </motion.div>
     </div>
