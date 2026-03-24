@@ -44,7 +44,7 @@ interface CouponData {
 
 export default function HowlChat() {
   const {
-    messages, session, isTyping, setIsTyping,
+    messages, session, isTyping, setIsTyping,setMessages,
     addBotMessage, addUserMessage, addSystemMessage,
     updateSession, resetSession,
   } = useChat();
