@@ -43,7 +43,7 @@ export default function PremiumForm({ userName, onSubmit, onClose }: PremiumForm
         <div className="text-center mb-5">
           <span className="text-3xl mb-2 block">💎</span>
           <h3 className="font-serif text-lg font-bold text-secondary-foreground">종합운명분석</h3>
-          <p className="text-sm text-muted-foreground mt-1">하울에게 직접 물어보세요</p>
+          <p className="text-sm text-muted-foreground mt-1">콕콕에게 직접 물어보세요</p>
           <p className="text-xl font-bold text-primary mt-2">59,000원</p>
         </div>
 
