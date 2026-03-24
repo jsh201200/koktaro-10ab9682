@@ -44,7 +44,7 @@ export default function PremiumForm({ userName, onSubmit, onClose }: PremiumForm
           <span className="text-3xl mb-2 block">💎</span>
           <h3 className="font-serif text-lg font-bold text-secondary-foreground">종합운명분석</h3>
           <p className="text-sm text-muted-foreground mt-1">콕콕에게 직접 물어보세요</p>
-          <p className="text-xl font-bold text-primary mt-2">59,000원</p>
+          <p className="text-xl font-bold text-primary mt-2">79,000원</p>
         </div>
 
         <div className="space-y-3 mb-4">
@@ -92,7 +92,7 @@ export default function PremiumForm({ userName, onSubmit, onClose }: PremiumForm
           disabled={filledQuestions.length === 0}
           className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          상담 신청하기 (59,000원)
+          상담 신청하기 (79,000원)
         </button>
 
         <p className="text-[9px] text-muted-foreground text-center mt-3">
