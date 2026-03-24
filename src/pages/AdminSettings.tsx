@@ -36,6 +36,19 @@ interface BannerSettings {
   newUserBanner: string;
 }
 
+interface Product {
+  id: string;
+  menu_id: number;
+  name: string;
+  icon: string;
+  desc: string;
+  detail_desc: string;
+  price: number;
+  enabled: boolean;
+  sort_order: number;
+  duration_minutes: number;
+}
+
 export default function AdminSettings() {
   const navigate = useNavigate();
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -58,6 +71,11 @@ export default function AdminSettings() {
     newUserDiscountActive: true,
     newUserBanner: '🎉 신규가입자 한정! {{minPrice}}원 이상 구매시 {{discount}}원 할인!',
   });
+
+  // 🆕 상품 관리
+  const [products, setProducts] = useState<Product[]>([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   const handlePasswordCheck = (val: string) => {
     setPassword(val);
@@ -120,6 +138,71 @@ export default function AdminSettings() {
 
     loadBannerSettings();
   }, [isAuthorized]);
+
+  // 🆕 상품 로드
+  useEffect(() => {
+    if (!isAuthorized || activeTab !== 'menus') return;
+
+    const loadProducts = async () => {
+      setLoadingProducts(true);
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('sort_order');
+
+      if (error) {
+        toast.error('상품 로드 실패: ' + error.message);
+      } else if (data) {
+        setProducts(data as Product[]);
+      }
+      setLoadingProducts(false);
+    };
+
+    loadProducts();
+  }, [isAuthorized, activeTab]);
+
+  // 🆕 상품 수정 저장
+  const handleSaveProduct = async () => {
+    if (!editingProduct) return;
+
+    const { error } = await supabase
+      .from('products')
+      .update({
+        name: editingProduct.name,
+        icon: editingProduct.icon,
+        desc: editingProduct.desc,
+        detail_desc: editingProduct.detail_desc,
+        price: editingProduct.price,
+        duration_minutes: editingProduct.duration_minutes,
+        enabled: editingProduct.enabled,
+      })
+      .eq('id', editingProduct.id);
+
+    if (error) {
+      toast.error('저장 실패: ' + error.message);
+    } else {
+      toast.success('상품이 수정되었습니다! ✨');
+      setProducts(products.map(p => p.id === editingProduct.id ? editingProduct : p));
+      setEditingProduct(null);
+    }
+  };
+
+  // 🆕 상품 삭제
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', productId);
+
+    if (error) {
+      toast.error('삭제 실패: ' + error.message);
+    } else {
+      toast.success('상품이 삭제되었습니다');
+      setProducts(products.filter(p => p.id !== productId));
+    }
+  };
 
   if (!isAuthorized) {
     return (
@@ -204,7 +287,7 @@ export default function AdminSettings() {
         >
           {activeTab === 'site' && <SiteConfigEditor />}
 
-          {/* 🆕 쿠폰/이벤트 탭 - 완전 개선 */}
+          {/* 쿠폰/이벤트 탭 */}
           {activeTab === 'coupons' && (
             <div className="space-y-8">
               <div>
@@ -426,6 +509,138 @@ export default function AdminSettings() {
                   </ul>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 🆕 상품 관리 탭 */}
+          {activeTab === 'menus' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-foreground">🛍️ 상품 관리</h2>
+
+              {loadingProducts ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="text-sm text-muted-foreground mt-2">로딩 중...</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                  {products.map((product) => (
+                    <div key={product.id} className="glass rounded-2xl p-4">
+                      {editingProduct?.id === product.id ? (
+                        // 수정 모드
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="text"
+                              value={editingProduct.name}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                              className="p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              placeholder="메뉴명"
+                            />
+                            <input
+                              type="number"
+                              value={editingProduct.price}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, price: parseInt(e.target.value) || 0 })}
+                              className="p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              placeholder="가격"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="text"
+                              value={editingProduct.icon}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, icon: e.target.value })}
+                              className="p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              placeholder="아이콘 이모지"
+                            />
+                            <input
+                              type="number"
+                              value={editingProduct.duration_minutes}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, duration_minutes: parseInt(e.target.value) || 0 })}
+                              className="p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              placeholder="시간(분)"
+                            />
+                          </div>
+
+                          <textarea
+                            value={editingProduct.desc}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, desc: e.target.value })}
+                            className="w-full p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                            rows={2}
+                            placeholder="짧은 설명"
+                          />
+
+                          <textarea
+                            value={editingProduct.detail_desc}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, detail_desc: e.target.value })}
+                            className="w-full p-2 rounded-lg glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                            rows={2}
+                            placeholder="상세 설명"
+                          />
+
+                          <div className="flex items-center gap-2 mb-3">
+                            <input
+                              type="checkbox"
+                              checked={editingProduct.enabled}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, enabled: e.target.checked })}
+                              className="w-4 h-4"
+                            />
+                            <label className="text-xs font-medium text-muted-foreground">활성화</label>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleSaveProduct}
+                              className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold"
+                            >
+                              저장
+                            </button>
+                            <button
+                              onClick={() => setEditingProduct(null)}
+                              className="flex-1 py-2 rounded-lg glass text-xs font-bold"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        // 조회 모드
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">{product.icon}</span>
+                              <p className="font-semibold text-sm text-foreground">{product.name}</p>
+                              {!product.enabled && <span className="text-[10px] px-2 py-0.5 rounded bg-destructive/20 text-destructive">비활성</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">{product.desc}</p>
+                            <div className="flex gap-4 text-xs text-muted-foreground">
+                              <span>💰 {product.price.toLocaleString()}원</span>
+                              <span>⏱️ {product.duration_minutes}분</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingProduct(product)}
+                              className="p-2 rounded-lg glass hover:bg-white/40 transition-colors"
+                              title="수정"
+                            >
+                              <Edit2 className="w-4 h-4 text-primary" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(product.id)}
+                              className="p-2 rounded-lg glass hover:bg-destructive/20 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
