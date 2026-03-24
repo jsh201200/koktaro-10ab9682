@@ -88,12 +88,13 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
               ? 'text-slate-700' 
               : 'text-slate-100'
           }`}>
-{/* 카드 뒷면의 설명글 부분 */}
+{/* 카드 뒷면의 설명글 부분 - 깔끔하게 정리 완료! */}
           <p className={`text-[10px] mb-3 px-2 leading-tight ${
             isSnack ? 'text-slate-700' : 'text-slate-100'
           }`}>
             {menu.detailDesc || "상세 설명이 준비 중입니다."}
           </p>
+          
           <button
             onClick={(e) => {
               e.stopPropagation();
