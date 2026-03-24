@@ -1,4 +1,3 @@
-하울최신
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import ChatHeader from '@/components/ChatHeader';
@@ -998,7 +997,7 @@ export default function HowlChat() {
           onClose={() => setShowPremiumReport(false)}
         />
       )}
-{/* ⚙️ [관리자 버튼] 채팅 페이지 우측 상단 고정 */}
+      {/* ⚙️ [관리자 버튼] 채팅 페이지 우측 상단 고정 */}
       <button
         onClick={() => navigate('/admin')}
         className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
