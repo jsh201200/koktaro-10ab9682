@@ -11,7 +11,6 @@ type Tab = 'branding' | 'colors' | 'links' | 'payment' | 'menus' | 'legal' | 'me
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'site', label: '사이트 설정', icon: <Globe className="w-4 h-4" /> },
-  { id: 'reviews', label: '후기 추가', icon: <MessageCircle className="w-4 h-4" /> },
   { id: 'branding', label: '브랜딩', icon: <Type className="w-4 h-4" /> },
   { id: 'colors', label: '배경/색상', icon: <Palette className="w-4 h-4" /> },
   { id: 'links', label: '링크 연결', icon: <Link2 className="w-4 h-4" /> },
