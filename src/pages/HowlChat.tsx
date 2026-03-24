@@ -539,14 +539,18 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
     setIsMenuOpen(false);
 
     const counselor = getCounselorForMenu(menu.id);
-    
-    // ✨ 핵심: 상담사별로 고유한 방 번호를 지정합니다. 
-    // 이렇게 하면 '이안' 방과 '지한' 방이 완전히 분리됩니다.
-    const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
+  const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
 
-    const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
-    const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
+  // ✨ 1. 화면에 남아있는 이전 상담사의 메시지를 즉시 지워줍니다.
+  // (useChat에서 자동으로 비워주기도 하지만, 여기서 미리 비워야 화면이 더 깔끔해요!)
+  setMessages([]); 
 
+  // ✨ 2. 인사말을 이미 보냈다는 기억을 리셋합니다. 
+  // 그래야 새 상담사가 "반가워요!" 하고 첫 인사를 건넵니다.
+  greetingSent.current = false; 
+
+  const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+  const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
     updateSession({
       selectedMenu: actualMenu,
       freeReadingDone: false,
