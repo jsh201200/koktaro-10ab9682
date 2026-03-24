@@ -23,7 +23,7 @@ export interface SessionState {
   imageFailCount: number;
   dbSessionId: string | null;
   roomId?: string;
-  counselorId?: string; // ✨ 추가
+  counselorId?: string;
 }
 
 const INITIAL_SESSION: SessionState = {
@@ -38,7 +38,7 @@ const INITIAL_SESSION: SessionState = {
   imageFailCount: 0,
   dbSessionId: null,
   roomId: undefined,
-  counselorId: undefined, // ✨ 추가
+  counselorId: undefined,
 };
 
 export function useChat() {
@@ -52,10 +52,11 @@ export function useChat() {
     return `msg-${Date.now()}-${idCounter.current}`;
   };
 
-  // Create DB session on first load
+  // 1️⃣ [초기 로드] 세션 아이디 확인 및 최초 세션 생성
   useEffect(() => {
     const initSession = async () => {
       const existingId = localStorage.getItem('howl_session_id');
+      
       if (existingId) {
         const { data } = await supabase.from('chat_sessions').select('*').eq('id', existingId).single();
         if (data) {
@@ -66,25 +67,6 @@ export function useChat() {
             isPaid: data.is_paid || false,
             roomId: data.room_id || undefined,
           }));
-          
-          const roomId = data.room_id;
-          const { data: history } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('session_id', data.id)
-            .eq('room_id', roomId || null)
-            .order('created_at', { ascending: true });
-          
-          if (history && history.length > 0) {
-            const msgs: ChatMessage[] = history.map(h => ({
-              id: h.id,
-              role: h.role as ChatMessage['role'],
-              content: h.content,
-              timestamp: new Date(h.created_at || '').getTime(),
-              image: h.image_url || undefined,
-            }));
-            setMessages(msgs);
-          }
           return;
         }
       }
@@ -117,12 +99,42 @@ export function useChat() {
     initSession().then(() => recordVisit());
   }, []);
 
+  // 2️⃣ [핵심 수정] 방(roomId)이 바뀔 때마다 해당 상담사와의 메시지만 새로 불러오기
+  useEffect(() => {
+    const fetchRoomMessages = async () => {
+      if (!session.dbSessionId || !session.roomId) return;
+
+      // 상담사가 바뀌면 일단 화면을 비웁니다.
+      setMessages([]);
+
+      const { data: history } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('session_id', session.dbSessionId)
+        .eq('room_id', session.roomId) // ✨ 현재 선택된 상담사의 방 번호로만 필터링!
+        .order('created_at', { ascending: true });
+      
+      if (history && history.length > 0) {
+        const msgs: ChatMessage[] = history.map(h => ({
+          id: h.id,
+          role: h.role as ChatMessage['role'],
+          content: h.content,
+          timestamp: new Date(h.created_at || '').getTime(),
+          image: h.image_url || undefined,
+        }));
+        setMessages(msgs);
+      }
+    };
+
+    fetchRoomMessages();
+  }, [session.roomId, session.dbSessionId]); // 👈 방 번호가 바뀌면 이 함수가 실행됩니다.
+
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
     if (!session.dbSessionId) return;
     
     await supabase.from('messages').insert({
       session_id: session.dbSessionId,
-      room_id: session.roomId || null,
+      room_id: session.roomId || null, // ✨ 저장할 때도 어떤 상담사 방인지 기록!
       role,
       content,
       image_url: imageUrl || null,
