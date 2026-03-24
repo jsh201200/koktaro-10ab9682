@@ -11,7 +11,7 @@ export interface Menu {
 }
 
 export const MENUS: Menu[] = [
-  { id: 0, category: 'A', categoryName: '입구', name: '콕타로 한 뼘 운세', icon: '🐣', desc: '오늘 하루 럭키 컬러 & 넘버!', detailDesc: '딱 오늘 하루의 기운만 짧고 굵게 리딩해주는 스낵 상담! 럭키 컬러, 럭키 음식, 한 줄 부적까지!', price: 1000, isSnack: true },
+  { id: 0, category: 'A', categoryName: '입구', name: '콕타로 한 뼘 운세', icon: '🐣', desc: '오늘 하루 럭키 컬러 & 넘버!', detailDesc: '딱 오늘 하루의 기운만 짧고 굵게 리딩해주는 스낵 상담! 럭키 컬러, 럭키 넘버까지!', price: 1000, isSnack: true },
   { id: 1, category: 'A', categoryName: '입구', name: '성명학', icon: '✍️', desc: '이름에 숨겨진 기운 분석', detailDesc: '한자 이름의 획수와 오행을 계산하여 타고난 기운과 성격을 팩폭합니다.', price: 4900 },
   { id: 2, category: 'A', categoryName: '입구', name: '관상/손금', icon: '👁️', desc: '얼굴과 손에 새겨진 운명', detailDesc: '얼굴 특징이나 손금 모양으로 현재 운의 흐름을 분석합니다.', price: 4900 },
   { id: 3, category: 'A', categoryName: '입구', name: 'MBTI 심리', icon: '🧠', desc: '동양 오행과 만난 MBTI', detailDesc: 'MBTI 유형을 음양오행과 결합한 현대판 사주 풀이입니다.', price: 4900 },
