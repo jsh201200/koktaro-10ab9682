@@ -46,7 +46,7 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
         transition={{ type: 'spring', stiffness: 260, damping: 20 }}
         className="relative w-full h-full transform-style-3d"
       >
-        {/* Front */}
+        {/* Front - 앞면 */}
         <div
           className={`absolute inset-0 backface-hidden rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
             isSnack
@@ -69,7 +69,7 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
           )}
         </div>
 
-        {/* Back - 🆕 개선된 버전 */}
+        {/* Back - 뒷면 */}
         <div
           className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
             isSnack 
@@ -83,12 +83,7 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
           <span className={`text-lg font-bold mb-2 ${isSnack ? 'text-primary' : 'text-primary'}`}>
             {formatElla(menu.price)}
           </span>
-          <p className={`text-[10px] mb-3 px-2 leading-tight ${
-            isSnack 
-              ? 'text-slate-700' 
-              : 'text-slate-100'
-          }`}>
-{/* 카드 뒷면의 설명글 부분 - 깔끔하게 정리 완료! */}
+          
           <p className={`text-[10px] mb-3 px-2 leading-tight ${
             isSnack ? 'text-slate-700' : 'text-slate-100'
           }`}>
