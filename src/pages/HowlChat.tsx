@@ -75,69 +75,88 @@ export default function HowlChat() {
   const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
 
   // 🔐 세션 검증 및 초기화
- useEffect(() => {
-    const validateSession = async () => {
-      const storedSessionId = localStorage.getItem('howl_session_id');
-      const storedProfileId = localStorage.getItem('howl_profile_id');
-      const lastAuthId = localStorage.getItem('howl_last_auth_id');
-      
-      if (!storedSessionId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        sessionIdRef.current = newSessionId;
-        resetSession();
-        return;
-      }
+useEffect(() => {
+  const validateSession = async () => {
+    const storedSessionId = localStorage.getItem('howl_session_id');
+    const storedProfileId = localStorage.getItem('howl_profile_id');
+    const lastAuthId = localStorage.getItem('howl_last_auth_id');
+    
+    if (!storedSessionId) {
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+      sessionIdRef.current = newSessionId;
+      resetSession();
+      return;
+    }
 
-      if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        localStorage.removeItem('howl_profile_id');
-        localStorage.removeItem('howl_last_auth_id');
-        sessionIdRef.current = newSessionId;
-        resetSession();
-        setUserProfile(null);
-        setView('landing');
-        toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
-        return;
-      }
+    if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+      localStorage.removeItem('howl_profile_id');
+      localStorage.removeItem('howl_last_auth_id');
+      sessionIdRef.current = newSessionId;
+      resetSession();
+      setUserProfile(null);
+      setView('landing');
+      toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
+      return;
+    }
 
-      if (storedProfileId) {
-        const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
-        if (data) {
-          setUserProfile({
-            id: data.id,
-            phone: data.phone,
-            nickname: data.nickname || '',
-            credits: data.credits || 0,
-            birth_date: data.birth_date || undefined,
-            birth_time: data.birth_time || undefined,
-            gender: data.gender || undefined,
-          });
-        }
-      }
-
-      // ✨ [가장 중요한 수정!] 저장된 세션에서 roomId와 counselorId를 가져옵니다.
-      const { data: sessionData } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('id', storedSessionId)
-        .single();
-
-      if (sessionData) {
-        updateSession({
-          dbSessionId: sessionData.id,
-          userName: sessionData.user_nickname || '',
-          isPaid: sessionData.is_paid || false,
-          // 🚪 나갔다 들어와도 '마지막으로 대화하던 방'으로 연결해줍니다!
-          roomId: sessionData.room_id || undefined, 
-          counselorId: sessionData.counselor_id || undefined,
+    if (storedProfileId) {
+      const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
+      if (data) {
+        setUserProfile({
+          id: data.id,
+          phone: data.phone,
+          nickname: data.nickname || '',
+          credits: data.credits || 0,
+          birth_date: data.birth_date || undefined,
+          birth_time: data.birth_time || undefined,
+          gender: data.gender || undefined,
         });
       }
-    };
+    }
 
-    validateSession();
-  }, []); //
+    // ✨ [핵심 수정] DB에서 roomId, counselorId, room_id 등을 정확히 복구합니다
+    const { data: sessionData } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('id', storedSessionId)
+      .single();
+
+    if (sessionData) {
+      console.log('🔄 [복구] 저장된 세션:', {
+        roomId: sessionData.room_id,
+        counselorId: sessionData.counselor_id,
+        selectedMenuId: sessionData.selected_menu_id,
+      });
+
+      updateSession({
+        dbSessionId: sessionData.id,
+        userName: sessionData.user_nickname || '',
+        isPaid: sessionData.is_paid || false,
+        // 🚪 [필수] 마지막으로 대화하던 방과 상담사를 복구합니다!
+        roomId: sessionData.room_id || undefined, 
+        counselorId: sessionData.counselor_id || undefined,
+      });
+
+      // 🔄 selectedMenu도 복구 (menuId로부터)
+      if (sessionData.selected_menu_id) {
+        const menu = MENUS.find(m => m.id === sessionData.selected_menu_id);
+        if (menu) {
+          const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+          const actualMenu = dbProduct 
+            ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
+            : menu;
+          updateSession({ selectedMenu: actualMenu });
+        }
+      }
+    }
+  };
+
+  validateSession();
+}, []);
+
 
   const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
     const hour = new Date().getHours();
