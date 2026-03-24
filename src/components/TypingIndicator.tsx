@@ -1,9 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import howlProfile from '@/assets/howl-profile.png';
 
 const MYSTICAL_MESSAGES = [
-  "하울이 너의 주파수를 맞추는 중...",
+  "콕콕이 너의 주파수를 맞추는 중...",
   "천상계의 기록을 살피는 중...",
   "별의 언어를 해독하는 중...",
   "기운의 흐름을 읽는 중...",
@@ -23,7 +22,7 @@ export default function TypingIndicator() {
   return (
     <div className="flex gap-2 justify-start">
       <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mt-1 outline outline-1 outline-white/40 outline-offset-[-1px]">
-        <img src={howlProfile} alt="하울" className="w-full h-full object-cover" />
+        <img src="/logo-default.png" alt="콕콕" className="w-full h-full object-cover" />
       </div>
       <div className="glass glow-border rounded-2xl rounded-tl-sm px-4 py-3">
         <div className="flex gap-1.5 mb-1.5">
