@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import howlProfile from '@/assets/howl-profile.png';
 
 const MYSTICAL_MESSAGES = [
   "콕콕이 너의 주파수를 맞추는 중...",
@@ -9,7 +10,11 @@ const MYSTICAL_MESSAGES = [
   "운명의 실타래를 풀어보는 중...",
 ];
 
-export default function TypingIndicator() {
+interface TypingIndicatorProps {
+  counselorImage?: string;
+}
+
+export default function TypingIndicator({ counselorImage }: TypingIndicatorProps) {
   const [msgIndex, setMsgIndex] = useState(() => Math.floor(Math.random() * MYSTICAL_MESSAGES.length));
 
   useEffect(() => {
@@ -22,7 +27,14 @@ export default function TypingIndicator() {
   return (
     <div className="flex gap-2 justify-start">
       <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mt-1 outline outline-1 outline-white/40 outline-offset-[-1px]">
-        <img src="/logo-default.png" alt="콕콕" className="w-full h-full object-cover" />
+        <img
+          src={counselorImage || howlProfile}
+          alt="상담사"
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = howlProfile;
+          }}
+        />
       </div>
       <div className="glass glow-border rounded-2xl rounded-tl-sm px-4 py-3">
         <div className="flex gap-1.5 mb-1.5">
