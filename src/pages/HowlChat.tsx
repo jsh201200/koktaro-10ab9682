@@ -537,48 +537,54 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
     }
   };
 
- const handleMenuSelect = async (menu: Menu) => {
+const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
+    // 1️⃣ 클릭한 메뉴에 맞는 상담사를 새로 데려옵니다.
     const counselor = getCounselorForMenu(menu.id);
+    // 2️⃣ [핵심] 상담사 ID가 포함된 고유한 방 번호를 만듭니다. (이게 있어야 이안이 못 따라와요!)
     const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
 
+    // 🧹 3. 이전 상담사와의 지저분한 대화창을 즉시 싹 비웁니다.
     setMessages([]); 
+    // 🧠 4. 상담사가 새로 인사를 건넬 수 있게 기억을 리셋합니다.
     greetingSent.current = false; 
 
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
     const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
-    const durationMin = dbProduct?.duration_minutes || 30; // 🕒 DB 설정 시간 가져오기
+    const durationMin = dbProduct?.duration_minutes || 30; // 🕒 DB 설정 시간 연동
 
+    // 5️⃣ 세션을 업데이트해서 '새로운 방'으로 완벽하게 이사 갑니다.
     updateSession({
       selectedMenu: actualMenu,
       freeReadingDone: false,
       questionCount: 0,
+      imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
-      roomId, 
+      roomId, // ✨ 새로운 방 번호 확정!
       counselorId: counselor.id,
     });
 
-    // ✨ [승하님을 위한 편의 기능] 테스트 모드면 그냥 바로 통과!
+    // 🧪 6. 승하님만을 위한 '테스트 모드 프리패스' 로직
     if (loadSettings().testMode) {
+      // ⏰ 이제 1분 설정하면 1분 타이머가 바로 돌아갑니다!
       activatePaidMode(durationMin, menu.id, actualMenu.name, actualMenu.price);
-      addSystemMessage(`🧪 테스트 모드: ${durationMin}분 상담실 입장 완료!`);
+      addSystemMessage(`🧪 테스트 모드: ${counselor.name}님과 ${durationMin}분 상담실 입장!`);
       
       setTimeout(() => {
         const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
         addBotMessage(welcomeGuide || `${actualMenu.name} 리딩을 시작할게! ✨`);
       }, 800);
-      return; // 👈 테스트 모드면 여기서 끝! 결제창 안 띄움.
+      return; 
     }
 
-    // --- 여기부터는 일반 사용자(유료) 로직 ---
+    // 💰 일반 유료 사용자용 로직
     if (menu.id === 16) {
       setShowPremiumForm(true);
     } else {
       setShowPayment(true);
     }
   };
-
   const handleScanComplete = async () => {
     const image = showScan;
     setShowScan(null);
