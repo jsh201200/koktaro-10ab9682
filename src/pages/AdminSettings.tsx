@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, Save, RotateCcw, Palette, Type, Link2, 
-  CreditCard, ShoppingBag, FileText, MessageCircle, 
-  Shield, Globe, Tag, Plus, Trash2, X, Edit2, Eye, EyeOff, Settings 
-} from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Palette, Type, Link2, CreditCard, ShoppingBag, FileText, MessageCircle, Shield, Globe, Tag, Plus, Trash2, X, Edit2, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { loadSettings, saveSettings, resetSettings, SiteSettings, DEFAULT_SETTINGS } from '@/stores/siteSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +29,7 @@ interface BannerSettings {
   couponMinPrice: number;
   couponActive: boolean;
   couponBanner: string;
+
   newUserDiscount: number;
   newUserMinPrice: number;
   newUserDiscountActive: boolean;
@@ -74,17 +71,6 @@ export default function AdminSettings() {
     newUserDiscountActive: true,
     newUserBanner: '🎉 신규가입자 한정! {{minPrice}}원 이상 구매시 {{discount}}원 할인!',
   });
-const [products, setProducts] = useState<Product[]>([]);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [loadingProducts, setLoadingProducts] = useState(false);
-
-  const handlePasswordCheck = (val: string) => {
-    setPassword(val);
-    const s = loadSettings();
-    if (val === s.adminPassword) {
-      setIsAuthorized(true);
-    }
-  };
 
   // 🆕 상품 관리
   const [products, setProducts] = useState<Product[]>([]);
@@ -301,59 +287,232 @@ const [products, setProducts] = useState<Product[]>([]);
         >
           {activeTab === 'site' && <SiteConfigEditor />}
 
-{/* 🎟️ 쿠폰 탭 (맛탱이 방지 안전 버전) */}
+          {/* 쿠폰/이벤트 탭 */}
           {activeTab === 'coupons' && (
             <div className="space-y-8">
-              <h2 className="text-2xl font-bold text-foreground mb-6">🎟️ 배너 & 할인 설정</h2>
-              <div className="glass-strong rounded-3xl p-6 glow-border mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">💳 전체 할인 (쿠폰)</h3>
-                  <button onClick={() => setBannerSettings(prev => ({ ...prev, couponActive: !prev.couponActive }))} className={`relative w-12 h-6 rounded-full transition-colors ${bannerSettings?.couponActive ? 'bg-primary' : 'bg-muted'}`}><div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${bannerSettings?.couponActive ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-                </div>
-                <div className="space-y-4">
-                  <Field label="쿠폰 코드" value={bannerSettings?.couponCode || ''} onChange={(v) => setBannerSettings(p => ({ ...p, couponCode: v.toUpperCase() }))} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="할인 금액" value={(bannerSettings?.couponDiscount || 0).toString()} onChange={(v) => setBannerSettings(p => ({ ...p, couponDiscount: parseInt(v) || 0 }))} />
-                    <Field label="최소 금액" value={(bannerSettings?.couponMinPrice || 0).toString()} onChange={(v) => setBannerSettings(p => ({ ...p, couponMinPrice: parseInt(v) || 0 }))} />
-                  </div>
-                  <Field label="배너 텍스트" value={bannerSettings?.couponBanner || ''} onChange={(v) => setBannerSettings(p => ({ ...p, couponBanner: v }))} multiline />
-                  <div className="bg-primary/10 rounded-xl p-3 border border-primary/20"><p className="text-xs text-primary font-semibold">📋 미리보기:</p><p className="text-sm text-foreground mt-1">
-                    {(bannerSettings?.couponBanner || '배너를 입력하세요').replace('{{discount}}', (bannerSettings?.couponDiscount || 0).toLocaleString()).replace('{{minPrice}}', (bannerSettings?.couponMinPrice || 0).toLocaleString())}
-                  </p></div>
-                </div>
-              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-foreground mb-6">🎟️ 배너 & 할인 설정</h2>
 
-                {/* 🎉 신규가입자 섹션 (안전 버전) */}
-              <div className="glass-strong rounded-3xl p-6 glow-border">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">🎉 신규가입자 할인</h3>
-                  <button onClick={() => setBannerSettings(p => ({ ...p, newUserDiscountActive: !p.newUserDiscountActive }))} className={`relative w-12 h-6 rounded-full transition-colors ${bannerSettings?.newUserDiscountActive ? 'bg-primary' : 'bg-muted'}`}><div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${bannerSettings?.newUserDiscountActive ? 'translate-x-7' : 'translate-x-1'}`} /></button>
-                </div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="할인 금액" value={(bannerSettings?.newUserDiscount || 0).toString()} onChange={(v) => setBannerSettings(p => ({ ...p, newUserDiscount: parseInt(v) || 0 }))} />
-                    <Field label="최소 금액" value={(bannerSettings?.newUserMinPrice || 0).toString()} onChange={(v) => setBannerSettings(p => ({ ...p, newUserMinPrice: parseInt(v) || 0 }))} />
+                {/* 전체 할인 섹션 */}
+                <div className="glass-strong rounded-3xl p-6 glow-border mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      💳 전체 할인 (쿠폰)
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setBannerSettings({
+                          ...bannerSettings,
+                          couponActive: !bannerSettings.couponActive,
+                        });
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        bannerSettings.couponActive ? 'bg-primary' : 'bg-muted'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          bannerSettings.couponActive ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </div>
-                  <Field label="배너 텍스트" value={bannerSettings?.newUserBanner || ''} onChange={(v) => setBannerSettings(p => ({ ...p, newUserBanner: v }))} multiline />
-                  <div className="bg-primary/10 rounded-xl p-3 border border-primary/20"><p className="text-xs text-primary font-semibold">📋 미리보기:</p><p className="text-sm text-foreground mt-1">
-                    {(bannerSettings?.newUserBanner || '배너를 입력하세요').replace('{{discount}}', (bannerSettings?.newUserDiscount || 0).toLocaleString()).replace('{{minPrice}}', (bannerSettings?.newUserMinPrice || 0).toLocaleString())}
-                  </p></div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        쿠폰 코드
+                      </label>
+                      <input
+                        type="text"
+                        value={bannerSettings.couponCode}
+                        onChange={(e) =>
+                          setBannerSettings({
+                            ...bannerSettings,
+                            couponCode: e.target.value.toUpperCase(),
+                          })
+                        }
+                        className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        placeholder="예: KOKTARO"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                          할인 금액 (원)
+                        </label>
+                        <input
+                          type="number"
+                          value={bannerSettings.couponDiscount}
+                          onChange={(e) =>
+                            setBannerSettings({
+                              ...bannerSettings,
+                              couponDiscount: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="3000"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                          최소 구매 금액 (원)
+                        </label>
+                        <input
+                          type="number"
+                          value={bannerSettings.couponMinPrice}
+                          onChange={(e) =>
+                            setBannerSettings({
+                              ...bannerSettings,
+                              couponMinPrice: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="9900"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        배너 텍스트 ({{discount}}, {{minPrice}} 사용 가능)
+                      </label>
+                      <textarea
+                        value={bannerSettings.couponBanner}
+                        onChange={(e) =>
+                          setBannerSettings({
+                            ...bannerSettings,
+                            couponBanner: e.target.value,
+                          })
+                        }
+                        className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                        rows={3}
+                        placeholder="예: 🎟️ 쿠폰에 오신 걸 환영합니다! {{minPrice}}원 이상 구매시 {{discount}}원 할인 중"
+                      />
+                    </div>
+
+                    {/* 미리보기 */}
+                    <div className="bg-primary/10 rounded-xl p-3 border border-primary/20">
+                      <p className="text-xs text-primary font-semibold">📋 미리보기:</p>
+                      <p className="text-sm text-foreground mt-1">
+                        {bannerSettings.couponBanner
+                          .replace('{{discount}}', bannerSettings.couponDiscount.toLocaleString())
+                          .replace('{{minPrice}}', bannerSettings.couponMinPrice.toLocaleString())}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 신규 할인 섹션 */}
+                <div className="glass-strong rounded-3xl p-6 glow-border">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      🎉 신규가입자 할인
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setBannerSettings({
+                          ...bannerSettings,
+                          newUserDiscountActive: !bannerSettings.newUserDiscountActive,
+                        });
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        bannerSettings.newUserDiscountActive ? 'bg-primary' : 'bg-muted'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          bannerSettings.newUserDiscountActive ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                          할인 금액 (원)
+                        </label>
+                        <input
+                          type="number"
+                          value={bannerSettings.newUserDiscount}
+                          onChange={(e) =>
+                            setBannerSettings({
+                              ...bannerSettings,
+                              newUserDiscount: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="5000"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                          최소 구매 금액 (원)
+                        </label>
+                        <input
+                          type="number"
+                          value={bannerSettings.newUserMinPrice}
+                          onChange={(e) =>
+                            setBannerSettings({
+                              ...bannerSettings,
+                              newUserMinPrice: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full p-2 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="19000"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                        배너 텍스트 ({{discount}}, {{minPrice}} 사용 가능)
+                      </label>
+                      <textarea
+                        value={bannerSettings.newUserBanner}
+                        onChange={(e) =>
+                          setBannerSettings({
+                            ...bannerSettings,
+                            newUserBanner: e.target.value,
+                          })
+                        }
+                        className="w-full p-3 rounded-xl glass text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                        rows={3}
+                        placeholder="예: 🎉 신규가입자 한정! {{minPrice}}원 이상 구매시 {{discount}}원 할인!"
+                      />
+                    </div>
+
+                    {/* 미리보기 */}
+                    <div className="bg-primary/10 rounded-xl p-3 border border-primary/20">
+                      <p className="text-xs text-primary font-semibold">📋 미리보기:</p>
+                      <p className="text-sm text-foreground mt-1">
+                        {bannerSettings.newUserBanner
+                          .replace('{{discount}}', bannerSettings.newUserDiscount.toLocaleString())
+                          .replace('{{minPrice}}', bannerSettings.newUserMinPrice.toLocaleString())}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 p-4 bg-primary/5 rounded-2xl border border-primary/20">
+                  <p className="text-xs text-primary font-semibold mb-2">💡 팁:</p>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• {{discount}} - 할인 금액으로 자동 변환</li>
+                    <li>• {{minPrice}} - 최소 구매 금액으로 자동 변환</li>
+                    <li>• 토글을 끄면 해당 배너가 숨겨집니다</li>
+                    <li>• 변경 후 "저장" 버튼을 눌러야 적용됩니다</li>
+                  </ul>
                 </div>
               </div>
             </div>
           )}
 
-                {/* 💡 팁 섹션 */}
-                <div className="mt-6 p-4 bg-primary/5 rounded-2xl border border-primary/20">
-                  <p className="text-xs text-primary font-semibold mb-2">💡 팁:</p>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>• {'{{discount}}'} - 할인 금액 자동 변환</li>
-                    <li>• {'{{minPrice}}'} - 최소 금액 자동 변환</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}          {/* 🆕 상품 관리 탭 */}
+          {/* 🆕 상품 관리 탭 */}
           {activeTab === 'menus' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-foreground">🛍️ 상품 관리</h2>
