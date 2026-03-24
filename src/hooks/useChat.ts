@@ -88,6 +88,7 @@ export function useChat() {
 
     const recordVisit = async () => {
       const sessionId = localStorage.getItem('howl_session_id');
+      if (!sessionId) return; // 세션 아이디 없을 때 예외처리 추가
       await supabase.from('page_visits').insert({
         session_id: sessionId,
         path: window.location.pathname,
@@ -99,19 +100,23 @@ export function useChat() {
     initSession().then(() => recordVisit());
   }, []);
 
-  // 2️⃣ [핵심 수정] 방(roomId)이 바뀔 때마다 해당 상담사와의 메시지만 새로 불러오기
+  // 2️⃣ [핵심 수정] 방(roomId)이 바뀔 때 이전 잔상을 '즉시' 지우고 해당 상담사 대화만 불러오기
   useEffect(() => {
     const fetchRoomMessages = async () => {
-      if (!session.dbSessionId || !session.roomId) return;
+      if (!session.dbSessionId || !session.roomId) {
+        // 방 번호가 없으면 대화창을 비워둡니다.
+        setMessages([]);
+        return;
+      }
 
-      // 상담사가 바뀌면 일단 화면을 비웁니다.
+      // ✨ [수정] 방을 옮기는 즉시 화면을 비워야 이안 선생님의 잔상이 남지 않습니다.
       setMessages([]);
 
       const { data: history } = await supabase
         .from('messages')
         .select('*')
         .eq('session_id', session.dbSessionId)
-        .eq('room_id', session.roomId) // ✨ 현재 선택된 상담사의 방 번호로만 필터링!
+        .eq('room_id', session.roomId) // 🎯 현재 상담사의 고유 roomId로만 필터링!
         .order('created_at', { ascending: true });
       
       if (history && history.length > 0) {
@@ -127,23 +132,25 @@ export function useChat() {
     };
 
     fetchRoomMessages();
-  }, [session.roomId, session.dbSessionId]); // 👈 방 번호가 바뀌면 이 함수가 실행됩니다.
+  }, [session.roomId, session.dbSessionId]); // 👈 roomId가 바뀌면 즉시 실행!
 
+  // 3️⃣ [핵심 수정] 메시지 저장 시 현재 roomId를 '확실하게' 낚아채서 저장
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
-    if (!session.dbSessionId) return;
+    if (!session.dbSessionId || !session.roomId) return; // roomId가 없으면 저장 안 함
     
     await supabase.from('messages').insert({
       session_id: session.dbSessionId,
-      room_id: session.roomId || null, // ✨ 저장할 때도 어떤 상담사 방인지 기록!
+      room_id: session.roomId, // ✨ 현재 세션에 찍힌 그 상담사 방으로 저장!
       role,
       content,
       image_url: imageUrl || null,
     });
-  }, [session.dbSessionId, session.roomId]);
+  }, [session.dbSessionId, session.roomId]); // 👈 session.roomId를 감시해서 최신화!
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, image?: string) => {
     const msg: ChatMessage = { id: genId(), role, content, timestamp: Date.now(), image, isNew: role === 'bot' };
     setMessages(prev => {
+      // 새로운 메시지가 추가될 때 이전 'isNew' 태그는 떼어줍니다.
       const updated = prev.map(m => m.isNew ? { ...m, isNew: false } : m);
       return [...updated, msg];
     });
@@ -172,6 +179,7 @@ export function useChat() {
     setSession(prev => {
       const next = { ...prev, ...updates };
       
+      // ✨ 세션 업데이트 시 DB에도 즉시 동기화 (방 이동 기록 등)
       if (next.dbSessionId && (updates.userName !== undefined || updates.isPaid !== undefined || updates.selectedMenu !== undefined || updates.roomId !== undefined)) {
         supabase.from('chat_sessions').update({
           user_nickname: next.userName || null,
