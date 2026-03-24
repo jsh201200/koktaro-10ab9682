@@ -75,58 +75,35 @@ export default function HowlChat() {
   const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
 
   // 🔐 세션 검증 및 초기화
- validateSession
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      const { data } = await supabase.from('products').select('*').eq('enabled', true).order('sort_order');
-      if (data) setDbProducts(data);
-    };
-    loadProducts();
-  }, []);
-
-  useEffect(() => {
-    const fetchCoupon = async () => {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'coupon')
-        .single();
-
-      if (data && data.value) {
-        setCouponData(data.value as CouponData);
+ useEffect(() => {
+    const validateSession = async () => {
+      const storedSessionId = localStorage.getItem('howl_session_id');
+      const storedProfileId = localStorage.getItem('howl_profile_id');
+      const lastAuthId = localStorage.getItem('howl_last_auth_id');
+      
+      if (!storedSessionId) {
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        return;
       }
-    };
 
-    fetchCoupon();
+      if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        localStorage.removeItem('howl_profile_id');
+        localStorage.removeItem('howl_last_auth_id');
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        setUserProfile(null);
+        setView('landing');
+        toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
+        return;
+      }
 
-    const channel = supabase
-      .channel('coupon-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'site_settings',
-          filter: `key=eq.coupon`,
-        },
-        (payload) => {
-          if (payload.new && payload.new.value) {
-            setCouponData(payload.new.value as CouponData);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  useEffect(() => {
-    const profileId = localStorage.getItem('howl_profile_id');
-    if (profileId) {
-      supabase.from('user_profiles').select('*').eq('id', profileId).single().then(({ data }) => {
+      if (storedProfileId) {
+        const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
         if (data) {
           setUserProfile({
             id: data.id,
@@ -138,9 +115,29 @@ export default function HowlChat() {
             gender: data.gender || undefined,
           });
         }
-      });
-    }
-  }, []);
+      }
+
+      // ✨ [가장 중요한 수정!] 저장된 세션에서 roomId와 counselorId를 가져옵니다.
+      const { data: sessionData } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('id', storedSessionId)
+        .single();
+
+      if (sessionData) {
+        updateSession({
+          dbSessionId: sessionData.id,
+          userName: sessionData.user_nickname || '',
+          isPaid: sessionData.is_paid || false,
+          // 🚪 나갔다 들어와도 '마지막으로 대화하던 방'으로 연결해줍니다!
+          roomId: sessionData.room_id || undefined, 
+          counselorId: sessionData.counselor_id || undefined,
+        });
+      }
+    };
+
+    validateSession();
+  }, []); //
 
   const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
     const hour = new Date().getHours();
