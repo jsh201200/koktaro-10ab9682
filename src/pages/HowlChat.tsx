@@ -179,7 +179,6 @@ export default function HowlChat() {
 
     const cleanupChannel = fetchAndSubscribeSystem();
 
-    return () => {
     return () => { cleanupChannel.then(c => c && supabase.removeChannel(c)); };
   }, []);
 
