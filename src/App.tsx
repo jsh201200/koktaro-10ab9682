@@ -7,6 +7,7 @@ import HowlChat from "./pages/HowlChat";
 import Admin from "./pages/Admin";
 import AdminSettings from "./pages/AdminSettings";
 import Reviews from "./pages/Reviews";
+import MyPage from "./pages/MyPage"; // 👈 1. 마이페이지 파일을 불러옵니다.
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/reviews" element={<Reviews />} />
+          <Route path="/mypage" element={<MyPage />} /> {/* 👈 2. 마이페이지 주소를 등록합니다. */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
