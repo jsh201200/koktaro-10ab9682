@@ -1,10 +1,3 @@
-import lunaImg from '@/assets/counselors/luna.jpg';
-import myunghwaImg from '@/assets/counselors/myunghwa.jpg';
-import songImg from '@/assets/counselors/song.jpg';
-import suhyunImg from '@/assets/counselors/suhyun.jpg';
-import ianImg from '@/assets/counselors/ian.jpg';
-import jihanImg from '@/assets/counselors/jihan.jpg';
-
 export interface Counselor {
   id: string;
   name: string;
@@ -25,7 +18,7 @@ export const COUNSELORS: Counselor[] = [
     age: '30대',
     gender: '남',
     specialty: '재물/진로',
-    image: ianImg,
+    image: '/counselors/ian.jpg',
     menuIds: [6, 8, 13],
     color: '#1a365d',
   },
@@ -36,7 +29,7 @@ export const COUNSELORS: Counselor[] = [
     age: '20대',
     gender: '남',
     specialty: '연애/MBTI',
-    image: jihanImg,
+    image: '/counselors/jihan.jpg',
     menuIds: [3, 11, 15],
     color: '#6B21A8',
   },
@@ -47,7 +40,7 @@ export const COUNSELORS: Counselor[] = [
     age: '50대',
     gender: '남',
     specialty: '사주/정통',
-    image: songImg,
+    image: '/counselors/song.jpg',
     menuIds: [4, 7, 9, 10],
     color: '#44403c',
   },
@@ -58,7 +51,7 @@ export const COUNSELORS: Counselor[] = [
     age: '20대',
     gender: '여',
     specialty: '타로/신비',
-    image: lunaImg,
+    image: '/counselors/luna.jpg',
     menuIds: [0, 5, 12],
     color: '#7c3aed',
   },
@@ -69,7 +62,7 @@ export const COUNSELORS: Counselor[] = [
     age: '30대',
     gender: '여',
     specialty: '심리/위로',
-    image: suhyunImg,
+    image: '/counselors/suhyun.jpg',
     menuIds: [1, 14],
     color: '#b45309',
   },
@@ -80,7 +73,7 @@ export const COUNSELORS: Counselor[] = [
     age: '50대',
     gender: '여',
     specialty: '관상/카리스마',
-    image: myunghwaImg,
+    image: '/counselors/myunghwa.jpg',
     menuIds: [2, 16],
     color: '#1e293b',
   },
