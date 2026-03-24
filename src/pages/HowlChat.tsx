@@ -399,31 +399,41 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
     return product?.price || 0;
   };
 
-  const handleBotResponse = useCallback(async (
-    userInput: string,
-    menuName?: string,
-    isPaid?: boolean,
-    imageBase64?: string,
-    counselorId?: string,
-    menuPrice?: number,
-  ) => {
-    setIsTyping(true);
-    try {
-      await delayedTyping();
-      const history = messages
-        .filter(m => m.role !== 'system')
-        .map(m => ({ role: m.role as 'bot' | 'user', content: m.content }));
+ const handleBotResponse = useCallback(async (
+  userInput: string,
+  menuName?: string,
+  isPaid?: boolean,
+  imageBase64?: string,
+  counselorId?: string,
+  menuPrice?: number,
+) => {
+  setIsTyping(true);
+  try {
+    await delayedTyping();
+    
+    // ✨ [핵심 수정] Gemini에게 보낼 대화 기록(history)을 만들 때, 
+    // 시스템 메시지는 빼고 '현재 방(roomId)'에 속한 메시지만 보내거나, 
+    // 혹은 현재 로컬 messages 배열이 '방 이동' 시점에 완벽히 비워졌는지 재확인해야 합니다.
+    const history = messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role as 'bot' | 'user', content: m.content }));
 
-      const response = await getGeminiResponse(
-        userInput, history, menuName, isPaid, imageBase64, counselorId, menuPrice
-      );
-      addBotMessage(response);
-    } catch {
-      addBotMessage('기운이 잠시 흔들렸어... 다시 물어봐줘! ✨');
-    } finally {
-      setIsTyping(false);
-    }
-  }, [messages, addBotMessage, setIsTyping, delayedTyping]);
+    const response = await getGeminiResponse(
+      userInput, 
+      history, 
+      menuName, 
+      isPaid, 
+      imageBase64, 
+      counselorId, // 👤 이제 이 ID가 이안이 아닌 '수현'이나 '지한'으로 정확히 들어갑니다!
+      menuPrice
+    );
+    addBotMessage(response);
+  } catch {
+    addBotMessage('기운이 잠시 흔들렸어... 다시 물어봐줘! ✨');
+  } finally {
+    setIsTyping(false);
+  }
+}, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
   const handleCrossSelling = useCallback(() => {
     const currentCounselor = session.selectedMenu
