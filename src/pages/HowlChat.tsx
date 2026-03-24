@@ -399,9 +399,9 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
       const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
       const name = session.userName || userProfile?.nickname || '';
       addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨ 궁금한 것을 말씀해줘!`);
-    }, 800);
-}, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]);
-  const delayedTyping = useCallback((): Promise<void> => {
+}, 800);
+  }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]);
+const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
   }, []);
 
