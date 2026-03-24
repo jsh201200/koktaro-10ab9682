@@ -901,7 +901,7 @@ export default function HowlChat() {
             />
           ))}
         </AnimatePresence>
-        {isTyping && <TypingIndicator />}
+{isTyping && <TypingIndicator counselorImage={currentCounselor?.image} />}
         <div ref={chatEndRef} />
       </main>
 
