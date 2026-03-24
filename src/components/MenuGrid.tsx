@@ -46,13 +46,9 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
         transition={{ type: 'spring', stiffness: 260, damping: 20 }}
         className="relative w-full h-full transform-style-3d"
       >
-        {/* Front - 앞면 */}
+        {/* Front - 앞면 (모든 카드 유리 스타일로 통일) */}
         <div
-          className={`absolute inset-0 backface-hidden rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
-            isSnack
-              ? 'bg-gradient-to-br from-yellow-50/80 to-pink-50/80 border-2 border-dashed border-primary/30 shadow-[0_0_12px_rgba(var(--primary-rgb),0.15)]'
-              : 'glass glow-border'
-          }`}
+          className="absolute inset-0 backface-hidden rounded-2xl p-3 flex flex-col items-center justify-center text-center glass glow-border"
         >
           <span className={`mb-1.5 ${isSnack ? 'text-3xl animate-bounce' : 'text-2xl'}`}>
             {menu.icon}
@@ -69,24 +65,18 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
           )}
         </div>
 
-        {/* Back - 뒷면 */}
+        {/* Back - 뒷면 (모든 카드 어두운 네이비 유리 스타일로 통일) */}
         <div
-          className={`absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center ${
-            isSnack 
-              ? 'bg-primary/15 border-2 border-primary/40' 
-              : 'bg-slate-900/90 border border-primary/40'
-          }`}
+          className="absolute inset-0 backface-hidden rotateY-180 rounded-2xl p-3 flex flex-col items-center justify-center text-center bg-slate-900/90 border border-primary/40"
         >
-          <span className={`text-[9px] font-semibold mb-2 ${isSnack ? 'text-primary' : 'text-primary/80'}`}>
+          <span className="text-[9px] font-semibold mb-2 text-primary/80">
             {menu.categoryName}
           </span>
-          <span className={`text-lg font-bold mb-2 ${isSnack ? 'text-primary' : 'text-primary'}`}>
+          <span className="text-lg font-bold mb-2 text-primary">
             {formatElla(menu.price)}
           </span>
           
-          <p className={`text-[10px] mb-3 px-2 leading-tight ${
-            isSnack ? 'text-slate-700' : 'text-slate-100'
-          }`}>
+          <p className="text-[10px] mb-3 px-2 leading-tight text-slate-100">
             {menu.detailDesc || "상세 설명이 준비 중입니다."}
           </p>
           
