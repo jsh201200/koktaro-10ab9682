@@ -1,10 +1,9 @@
-import howlProfile from '@/assets/howl-profile.png';
 import { ArrowLeft, X } from 'lucide-react';
 
 interface ChatHeaderProps {
   sessionTime: number | null;
   counselorName?: string;
-  counselorImage?: any; // import된 이미지 객체를 받을 수 있도록 수정
+  counselorImage?: any;
   onBack?: () => void;
   onExit?: () => void;
 }
@@ -18,7 +17,7 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
 
   // 이미지 소스를 안전하게 처리
   const getImageSrc = () => {
-    if (!counselorImage) return howlProfile;
+    if (!counselorImage) return '/logo-default.png'; // ← fallback을 기본 경로로 변경
     
     // string 경로
     if (typeof counselorImage === 'string') {
@@ -36,7 +35,7 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
     }
     
     // fallback
-    return howlProfile;
+    return '/logo-default.png';
   };
 
   return (
@@ -55,7 +54,7 @@ export default function ChatHeader({ sessionTime, counselorName, counselorImage,
               className="w-full h-full object-cover" 
               onError={(e) => {
                 // 이미지 로드 실패 시 fallback
-                (e.target as HTMLImageElement).src = howlProfile;
+                (e.target as HTMLImageElement).src = '/logo-default.png';
               }}
             />
           </div>
