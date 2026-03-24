@@ -10,6 +10,9 @@ export interface Counselor {
   color: string;
 }
 
+// 🆕 모든 메뉴 ID (0~16)
+const ALL_MENU_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
 export const COUNSELORS: Counselor[] = [
   {
     id: 'ian',
@@ -19,7 +22,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '남',
     specialty: '재물/진로',
     image: '/counselors/ian.jpg',
-    menuIds: [6, 8, 13],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#1a365d',
   },
   {
@@ -30,7 +33,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '남',
     specialty: '연애/MBTI',
     image: '/counselors/jihan.jpg',
-    menuIds: [3, 11, 15],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#6B21A8',
   },
   {
@@ -41,7 +44,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '남',
     specialty: '사주/정통',
     image: '/counselors/song.jpg',
-    menuIds: [4, 7, 9, 10],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#44403c',
   },
   {
@@ -52,7 +55,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '여',
     specialty: '타로/신비',
     image: '/counselors/luna.jpg',
-    menuIds: [0, 5, 12],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#7c3aed',
   },
   {
@@ -63,7 +66,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '여',
     specialty: '심리/위로',
     image: '/counselors/suhyun.jpg',
-    menuIds: [1, 14],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#b45309',
   },
   {
@@ -74,7 +77,7 @@ export const COUNSELORS: Counselor[] = [
     gender: '여',
     specialty: '관상/카리스마',
     image: '/counselors/myunghwa.jpg',
-    menuIds: [2, 16],
+    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
     color: '#1e293b',
   },
 ];
