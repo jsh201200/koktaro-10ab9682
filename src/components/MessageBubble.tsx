@@ -1,11 +1,10 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '@/hooks/useChat';
-import howlProfile from '@/assets/howl-profile.png';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  counselorImage?: string;
+  counselorImage?: any;
 }
 
 function StreamingText({ text }: { text: string }) {
@@ -24,11 +23,35 @@ function StreamingText({ text }: { text: string }) {
         setDisplayed(text.slice(0, indexRef.current));
       }
     }, 18);
+
     return () => clearInterval(interval);
   }, [text]);
 
   return <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{displayed}</p>;
 }
+
+// 🆕 이미지 소스를 안전하게 처리하는 함수
+const getImageSrc = (counselorImage?: any): string => {
+  if (!counselorImage) return '/logo-default.png';
+  
+  // string 경로
+  if (typeof counselorImage === 'string') {
+    return counselorImage;
+  }
+  
+  // import된 이미지 객체
+  if (counselorImage.default) {
+    return counselorImage.default;
+  }
+  
+  // 기타 이미지 객체
+  if (counselorImage.src) {
+    return counselorImage.src;
+  }
+  
+  // fallback
+  return '/logo-default.png';
+};
 
 export default function MessageBubble({ message, counselorImage }: MessageBubbleProps) {
   const { role, content, image, isNew } = message;
@@ -58,7 +81,14 @@ export default function MessageBubble({ message, counselorImage }: MessageBubble
     >
       {isBot && (
         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mt-1 outline outline-1 outline-white/40 outline-offset-[-1px]">
-          <img src={counselorImage || howlProfile} alt="상담사" className="w-full h-full object-cover" />
+          <img 
+            src={getImageSrc(counselorImage)} 
+            alt="상담사" 
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/logo-default.png';
+            }}
+          />
         </div>
       )}
       <div
