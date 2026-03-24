@@ -18,7 +18,7 @@ export default function ReviewModal({ sessionId, profileId, userName, menuName, 
   const [rating, setRating] = useState(5);
   const [submitting, setSubmitting] = useState(false);
 
-  // 🎁 자동 적립금 조건: 9,900원 이상 + 100자 이상
+  // 🎁 자동 적립금 조건: 9,900원 이상 + 20자 이상
   const canEarnCredits = paymentPrice >= 9900 && content.length >= 100;
 
   const maskedName = userName.length >= 2
@@ -27,7 +27,7 @@ export default function ReviewModal({ sessionId, profileId, userName, menuName, 
 
   const handleSubmit = async () => {
     if (content.length < 10) {
-      toast.error('후기를 10자 이상 작성해주세요');
+      toast.error('후기를 20자 이상 작성해주세요');
       return;
     }
     setSubmitting(true);
