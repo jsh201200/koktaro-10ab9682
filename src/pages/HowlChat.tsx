@@ -925,29 +925,37 @@ setView('landing');
         />
       )}
 
-      {showReview && userProfile && session.dbSessionId && session.selectedMenu && (
-        <ReviewModal
-          sessionId={session.dbSessionId}
-          profileId={userProfile.id}
-          userName={userProfile.nickname}
-          menuName={session.selectedMenu.name}
-          paymentPrice={getDbPrice(session.selectedMenu.id)}
-          onClose={() => {
-            setShowReview(false);
-            setShowPremiumReport(true);
-          }}
-        />
-      )}
+     {/* ✨ 수정된 리뷰 모달 부분: 프리미엄 메뉴일 때만 리포트를 띄웁니다 */}
+{showReview && userProfile && session.dbSessionId && session.selectedMenu && (
+  <ReviewModal
+    sessionId={session.dbSessionId}
+    profileId={userProfile.id}
+    userName={userProfile.nickname}
+    menuName={session.selectedMenu.name}
+    paymentPrice={getDbPrice(session.selectedMenu.id)}
+    onClose={() => {
+      setShowReview(false);
+      // 💎 메뉴 ID가 16(프리미엄 종합분석)일 때만 리포트 창을 엽니다.
+      if (session.selectedMenu?.id === 16) {
+        setShowPremiumReport(true);
+      } else {
+        // 일반 메뉴는 리포트 없이 그냥 종료 (필요시 알림창 추가 가능)
+        toast.success("상담이 종료되었습니다. 또 놀러오세요! ✨");
+      }
+    }}
+  />
+)}
 
-      {showPremiumReport && (
-        <PremiumReport
-          counselorName={currentCounselor?.name || ''}
-          menuName={session.selectedMenu?.name || ''}
-          userName={userProfile?.nickname || ''}
-          chatMessages={messages}
-          onClose={() => setShowPremiumReport(false)}
-        />
-      )}
+{/* 📄 리포트 창에 대화 내용(messages)을 확실히 넘겨줍니다 */}
+{showPremiumReport && (
+  <PremiumReport
+    counselorName={currentCounselor?.name || ''}
+    menuName={session.selectedMenu?.name || ''}
+    userName={userProfile?.nickname || ''}
+    chatMessages={messages} // 👈 이 messages가 있어야 리포트에 글자가 나옵니다!
+    onClose={() => setShowPremiumReport(false)}
+  />
+)}
 
       <button
         onClick={() => navigate('/admin')}
