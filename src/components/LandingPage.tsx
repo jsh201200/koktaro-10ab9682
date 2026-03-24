@@ -6,6 +6,7 @@ import { COUNSELORS } from '@/data/counselors';
 import { MENUS } from '@/data/menus';
 import { Star, Gift, ChevronRight, X, Play, LogOut, User } from 'lucide-react';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
+import { useChat } from '@/hooks/useChat'; // ✨ useChat 추가
 
 interface Review {
   id: string;
@@ -68,6 +69,9 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const [menusWithPrices, setMenusWithPrices] = useState<MenuWithPrice[]>([]);
   const { config } = useSiteConfig();
   const [showPopup, setShowPopup] = useState(false);
+
+  // ✨ 청소기(setMessages)를 useChat에서 가져옵니다.
+  const { setMessages } = useChat();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -170,6 +174,11 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const handleStartConsult = (counselorId: string) => {
     const counselor = COUNSELORS.find(c => c.id === counselorId);
     if (counselor && counselor.menuIds.length > 0) {
+      // 🧹 새로운 상담 시작 시 이전 상담 내용을 화면에서 비웁니다.
+      if (typeof setMessages === 'function') {
+        setMessages([]);
+      }
+      
       const menuId = counselor.menuIds[0];
       onStartChat(menuId, counselorId);
     }
@@ -179,7 +188,8 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     const consult = ongoingConsults.get(counselorId);
     if (consult) {
       localStorage.setItem('continue_room_id', consult.room_id);
-onStartChat(undefined, counselorId);
+      // 이어하기는 대화 내용을 유지해야 하므로 setMessages를 호출하지 않습니다.
+      onStartChat(undefined, counselorId);
     }
   };
 
