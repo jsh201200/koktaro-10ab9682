@@ -539,7 +539,10 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
     setIsMenuOpen(false);
 
     const counselor = getCounselorForMenu(menu.id);
-    const roomId = `room_${counselor.id}_${Date.now()}`;
+    
+    // ✨ 핵심: 상담사별로 고유한 방 번호를 지정합니다. 
+    // 이렇게 하면 '이안' 방과 '지한' 방이 완전히 분리됩니다.
+    const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
 
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
     const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
@@ -550,9 +553,11 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
       questionCount: 0,
       imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
-      roomId,
-      counselorId: counselor.id, // ✨ 메뉴 선택 시 counselorId 저장
+      roomId, // 이제 분리된 방으로 입장합니다!
+      counselorId: counselor.id,
     });
+    
+    // ... (이하 동일)
 
     if (menu.id === 0) {
       // ✨ 테스트 모드면 결제 스킵
