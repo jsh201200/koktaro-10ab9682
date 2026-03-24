@@ -179,7 +179,7 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     const consult = ongoingConsults.get(counselorId);
     if (consult) {
       localStorage.setItem('continue_room_id', consult.room_id);
-      onStartChat();
+onStartChat(undefined, counselorId);
     }
   };
 
