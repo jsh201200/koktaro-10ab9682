@@ -74,12 +74,42 @@ export async function getGeminiResponse(
   counselorId?: string,
   menuPrice?: number,
 ): Promise<string> {
-  // ✨ [핵심 수정] counselorId를 대소문자 무관하게, 그리고 'song'과 'songsengsang'을 모두 처리할 수 있게 보강!
-  const targetId = counselorId?.toLowerCase() === 'song' ? 'songsengsang' : counselorId;
-  const basePrompt = targetId ? (COUNSELOR_PROMPTS[targetId] || COUNSELOR_PROMPTS.luna) : COUNSELOR_PROMPTS.luna;
+  // ✨ [핵심 수정] counselorId 매핑을 견고하게 처리합니다
+  // 1. 빈 값 체크
+  if (!counselorId || counselorId.trim() === '') {
+    console.warn('⚠️ [경고] counselorId가 비어있습니다. 기본값(luna)을 사용합니다.');
+    counselorId = 'luna';
+  }
+
+  // 2. 정규화 (소문자 변환 + 공백 제거)
+  let normalizedId = counselorId.toLowerCase().trim();
   
+  // 3. 특수 케이스 처리 ('song' → 'songsengsang')
+  if (normalizedId === 'song') {
+    normalizedId = 'songsengsang';
+  }
+
+  // 4. 유효성 검증 (존재하는 상담사인지 확인)
+  const validCounselors = Object.keys(COUNSELOR_PROMPTS);
+  if (!validCounselors.includes(normalizedId)) {
+    console.warn(`⚠️ [경고] 상담사 ID '${normalizedId}'가 존재하지 않습니다. 사용 가능한 ID: ${validCounselors.join(', ')}`);
+    console.warn(`📍 원본 입력값: '${counselorId}'`);
+    // 폴백: luna가 기본값 (이전의 잘못된 기본값 제거!)
+    normalizedId = 'luna';
+  }
+
+  const basePrompt = COUNSELOR_PROMPTS[normalizedId];
+  
+  console.log('✅ [선택됨] 상담사:', {
+    원본입력: counselorId,
+    정규화됨: normalizedId,
+    사용프롬프트: basePrompt.substring(0, 50) + '...',
+  });
+
   const specializedKey = Object.keys(MENU_KNOWLEDGE_BASE).find(key => menuName?.includes(key));
-  const knowledgeGuide = specializedKey ? MENU_KNOWLEDGE_BASE[specializedKey] : "전문 역술가로서 사용자의 고민을 깊이 있게 상담하세요.";
+  const knowledgeGuide = specializedKey 
+    ? MENU_KNOWLEDGE_BASE[specializedKey] 
+    : "전문 역술가로서 사용자의 고민을 깊이 있게 상담하세요.";
 
   /**
    * 🟢 [최종 통합 시스템 프롬프트]
@@ -126,11 +156,12 @@ ${basePrompt}
     { role: 'user' as const, content: userInput },
   ];
 
+  // 나머지 코드는 동일합니다...
   try {
     const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, menuName, isPaid, imageBase64, counselorId, menuPrice }),
+      body: JSON.stringify({ messages, menuName, isPaid, imageBase64, counselorId: normalizedId, menuPrice }),
     });
 
     if (!resp.ok) {
@@ -167,6 +198,7 @@ ${basePrompt}
     return "천상계와의 연결이 잠시 끊겼어... 조금 후에 다시 시도해줘! 🌟";
   }
 }
+
 
 function stripMarkdown(text: string): string {
   return text
