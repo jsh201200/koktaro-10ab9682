@@ -537,64 +537,46 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
     }
   };
 
-  const handleMenuSelect = async (menu: Menu) => {
+ const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
 
     const counselor = getCounselorForMenu(menu.id);
-  const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
+    const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
 
-  // ✨ 1. 화면에 남아있는 이전 상담사의 메시지를 즉시 지워줍니다.
-  // (useChat에서 자동으로 비워주기도 하지만, 여기서 미리 비워야 화면이 더 깔끔해요!)
-  setMessages([]); 
+    setMessages([]); 
+    greetingSent.current = false; 
 
-  // ✨ 2. 인사말을 이미 보냈다는 기억을 리셋합니다. 
-  // 그래야 새 상담사가 "반가워요!" 하고 첫 인사를 건넵니다.
-  greetingSent.current = false; 
+    const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+    const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
+    const durationMin = dbProduct?.duration_minutes || 30; // 🕒 DB 설정 시간 가져오기
 
-  const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
-  const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
     updateSession({
       selectedMenu: actualMenu,
       freeReadingDone: false,
       questionCount: 0,
-      imageFailCount: 0,
       userName: session.userName || userProfile?.nickname || '',
-      roomId, // 이제 분리된 방으로 입장합니다!
+      roomId, 
       counselorId: counselor.id,
     });
-    
-    // ... (이하 동일)
 
-    if (menu.id === 0) {
-      // ✨ 테스트 모드면 결제 스킵
-      if (loadSettings().testMode) {
-        activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
-        addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
-        return;
-      }
-      setShowPayment(true);
-      return;
-    }
-
-    if (menu.id === 16) {
-      setShowPremiumForm(true);
-      return;
-    }
-
-    // ✨ 테스트 모드면 결제 스킵하고 상담사가 먼저 말 걸기
+    // ✨ [승하님을 위한 편의 기능] 테스트 모드면 그냥 바로 통과!
     if (loadSettings().testMode) {
-      activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
-      addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
+      activatePaidMode(durationMin, menu.id, actualMenu.name, actualMenu.price);
+      addSystemMessage(`🧪 테스트 모드: ${durationMin}분 상담실 입장 완료!`);
+      
       setTimeout(() => {
         const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
-        const name = session.userName || userProfile?.nickname || '';
-        addBotMessage(welcomeGuide || `${name}님, ${actualMenu.name} 상담을 시작할게요! 궁금한 것을 말씀해주세요 ✨`);
+        addBotMessage(welcomeGuide || `${actualMenu.name} 리딩을 시작할게! ✨`);
       }, 800);
-      return;
+      return; // 👈 테스트 모드면 여기서 끝! 결제창 안 띄움.
     }
 
-    // ✨ 모든 메뉴 결제창 띄우기
-    setShowPayment(true);
+    // --- 여기부터는 일반 사용자(유료) 로직 ---
+    if (menu.id === 16) {
+      setShowPremiumForm(true);
+    } else {
+      setShowPayment(true);
+    }
   };
 
   const handleScanComplete = async () => {
