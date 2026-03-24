@@ -176,38 +176,62 @@ export function useChat() {
   }, [addMessage, saveChatMessage]);
 
   const updateSession = useCallback((updates: Partial<SessionState>) => {
-    setSession(prev => {
-      const next = { ...prev, ...updates };
+  setSession(prev => {
+    const next = { ...prev, ...updates };
+    
+    // ✨ [핵심 수정] 세션 업데이트 시 DB에도 즉시 동기화합니다.
+    // 특히 roomId, counselorId, selectedMenuId를 놓치지 않도록 개선했습니다.
+    if (next.dbSessionId) {
+      const updatePayload: any = {};
       
-      // ✨ 세션 업데이트 시 DB에도 즉시 동기화 (방 이동 기록 등)
-      if (next.dbSessionId && (updates.userName !== undefined || updates.isPaid !== undefined || updates.selectedMenu !== undefined || updates.roomId !== undefined)) {
-        supabase.from('chat_sessions').update({
-          user_nickname: next.userName || null,
-          is_paid: next.isPaid,
-          selected_menu_id: next.selectedMenu?.id ?? null,
-          room_id: next.roomId || null,
-        }).eq('id', next.dbSessionId).then(() => {});
+      // 사용자 정보 업데이트
+      if (updates.userName !== undefined) {
+        updatePayload.user_nickname = next.userName || null;
       }
-      return next;
-    });
-  }, []);
-
-  const resetSession = useCallback(() => {
-    localStorage.removeItem('howl_session_id');
-    setSession(INITIAL_SESSION);
-    setMessages([]);
-  }, []);
-
-  return {
-    messages,
-    setMessages,
-    session,
-    isTyping,
-    setIsTyping,
-    addBotMessage,
-    addUserMessage,
-    addSystemMessage,
-    updateSession,
-    resetSession,
-  };
-}
+      
+      // 결제 상태 업데이트
+      if (updates.isPaid !== undefined) {
+        updatePayload.is_paid = next.isPaid;
+      }
+      
+      // 선택된 메뉴 업데이트 (메뉴 ID 저장)
+      if (updates.selectedMenu !== undefined) {
+        updatePayload.selected_menu_id = next.selectedMenu?.id ?? null;
+      }
+      
+      // 🚪 [필수] 방 번호 업데이트
+      if (updates.roomId !== undefined) {
+        updatePayload.room_id = next.roomId || null;
+        console.log('💾 [DB 저장] roomId:', next.roomId);
+      }
+      
+      // 👤 [필수] 상담사 ID 업데이트
+      if (updates.counselorId !== undefined) {
+        updatePayload.counselor_id = next.counselorId || null;
+        console.log('💾 [DB 저장] counselorId:', next.counselorId);
+      }
+      
+      // 페이로드에 내용이 있을 때만 DB 업데이트 실행
+      if (Object.keys(updatePayload).length > 0) {
+        console.log('🔄 [DB 동기화]', {
+          sessionId: next.dbSessionId,
+          payload: updatePayload,
+        });
+        
+        supabase
+          .from('chat_sessions')
+          .update(updatePayload)
+          .eq('id', next.dbSessionId)
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('❌ [DB 업데이트 실패]', error);
+            } else {
+              console.log('✅ [DB 업데이트 성공]', data);
+            }
+          });
+      }
+    }
+    
+    return next;
+  });
+}, []);
