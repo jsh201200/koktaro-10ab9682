@@ -726,7 +726,7 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
       supabase.from('chat_sessions').update({ profile_id: profile.id, user_nickname: profile.nickname }).eq('id', session.dbSessionId);
     }
 
-    setView('chat');
+setView('landing');
   };
 
   // ✨ 상담 시작 및 이어하기 처리 (얼굴 안 나오는 오류 수정 완료!)
