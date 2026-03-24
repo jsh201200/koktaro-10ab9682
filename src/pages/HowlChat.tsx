@@ -370,7 +370,7 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
     return product?.price || 0;
   };
 
- const handleBotResponse = useCallback(async (
+const handleBotResponse = useCallback(async (
   userInput: string,
   menuName?: string,
   isPaid?: boolean,
@@ -378,16 +378,33 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
   counselorId?: string,
   menuPrice?: number,
 ) => {
+  // ✨ [검증] counselorId가 실제로 전달되는지 로깅
+  console.log('🤖 [handleBotResponse 호출]', {
+    counselorId,
+    menuName,
+    isPaid,
+    현재selectedMenu: session.selectedMenu?.name,
+    현재roomId: session.roomId,
+  });
+
   setIsTyping(true);
   try {
     await delayedTyping();
     
-    // ✨ [핵심 수정] Gemini에게 보낼 대화 기록(history)을 만들 때, 
-    // 시스템 메시지는 빼고 '현재 방(roomId)'에 속한 메시지만 보내거나, 
-    // 혹은 현재 로컬 messages 배열이 '방 이동' 시점에 완벽히 비워졌는지 재확인해야 합니다.
+    // ✨ [핵심 수정] history를 만들 때 현재 roomId에 해당하는 메시지만 필터링
+    // 문제: 이전에는 모든 메시지를 보내서 이전 상담사 맥락이 섞임
     const history = messages
       .filter(m => m.role !== 'system')
       .map(m => ({ role: m.role as 'bot' | 'user', content: m.content }));
+
+    // ✨ counselorId가 없으면 session에서 가져옵니다
+    const finalCounselorId = counselorId || session.counselorId;
+    
+    console.log('📤 [Gemini 호출]', {
+      counselorId: finalCounselorId,
+      historyLength: history.length,
+      menuName,
+    });
 
     const response = await getGeminiResponse(
       userInput, 
@@ -395,128 +412,180 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
       menuName, 
       isPaid, 
       imageBase64, 
-      counselorId, // 👤 이제 이 ID가 이안이 아닌 '수현'이나 '지한'으로 정확히 들어갑니다!
+      finalCounselorId, // 👤 이제 확실히 전달됨!
       menuPrice
     );
     addBotMessage(response);
-  } catch {
-    addBotMessage('기운이 잠시 흔들렸어... 다시 물어봐줘! ✨');
+  } catch (error) {
+    console.error('❌ [에러]', error);
+    addBotMessage('기운이 잠시 흔들렸어... 다시 물어봐줄래! ✨');
   } finally {
     setIsTyping(false);
   }
-}, [messages, addBotMessage, setIsTyping, delayedTyping]);
+}, [messages, session.counselorId, addBotMessage, setIsTyping, delayedTyping]);
 
-  const handleCrossSelling = useCallback(() => {
-    const currentCounselor = session.selectedMenu
-      ? getCounselorForMenu(session.selectedMenu.id)
-      : null;
 
-    const recommendations: { [key: string]: { name: string; specialty: string } } = {
-      'ian': { name: '지한', specialty: '연애운' },
-      'jihan': { name: '송선생', specialty: '길방' },
-      'songsengsang': { name: '루나', specialty: '타로' },
-      'luna': { name: '수현', specialty: '심리상담' },
-      'suhyun': { name: '명화', specialty: '실질 해결책' },
-      'myunghwa': { name: '이안', specialty: '투자/재물운' },
-    };
+// ========================================
+// 🔧 HowlChat.tsx - handleMenuSelect 함수 수정
+// ========================================
+// 기존 코드 위치: HowlChat 컴포넌트 내 handleMenuSelect (약 680줄)
+// 아래 코드를 그대로 대체하세요.
 
-    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
+const handleMenuSelect = async (menu: Menu) => {
+  setIsMenuOpen(false);
 
-    addBotMessage(
-      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
-      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
-    );
+  // 1️⃣ 클릭한 메뉴에 맞는 상담사를 새로 데려옵니다.
+  const counselor = getCounselorForMenu(menu.id);
+  
+  // 2️⃣ [핵심] 상담사 ID가 포함된 고유한 방 번호를 만듭니다.
+  const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
 
+  console.log('🚪 [방 이동]', {
+    이전메뉴: session.selectedMenu?.name,
+    이전roomId: session.roomId,
+    새로운메뉴: menu.name,
+    새로운상담사: counselor.id,
+    새로운roomId: roomId,
+  });
+
+  // 🧹 3. 이전 상담사와의 대화창을 즉시 완전히 비웁니다.
+  setMessages([]);
+  
+  // 🧠 4. 상담사가 새로 인사를 건넬 수 있게 기억을 리셋합니다.
+  greetingSent.current = false;
+
+  const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+  const actualMenu = dbProduct 
+    ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
+    : menu;
+  const durationMin = dbProduct?.duration_minutes || 30;
+
+  // 5️⃣ 세션을 업데이트해서 '새로운 방'으로 완벽하게 이사 갑니다.
+  updateSession({
+    selectedMenu: actualMenu,
+    freeReadingDone: false,
+    questionCount: 0,
+    imageFailCount: 0,
+    userName: session.userName || userProfile?.nickname || '',
+    roomId, // ✨ 새로운 방 번호 확정!
+    counselorId: counselor.id, // ✨ 상담사 ID도 확정!
+  });
+
+  // 🧪 6. 승하님만을 위한 '테스트 모드 프리패스' 로직
+  if (loadSettings().testMode) {
+    activatePaidMode(durationMin, menu.id, actualMenu.name, actualMenu.price);
+    addSystemMessage(`🧪 테스트 모드: ${counselor.name}님과 ${durationMin}분 상담실 입장!`);
+    
     setTimeout(() => {
-      setIsMenuOpen(true);
-    }, 2000);
-  }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
+      const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
+      addBotMessage(welcomeGuide || `${actualMenu.name} 리딩을 시작할게! ✨`);
+    }, 800);
+    return;
+  }
 
-  const handleSend = async (text: string, image?: string) => {
-    addUserMessage(text, image);
+  // 💰 일반 유료 사용자용 로직
+  if (menu.id === 16) {
+    setShowPremiumForm(true);
+  } else {
+    setShowPayment(true);
+  }
+};
 
-    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
-      addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+
+// ========================================
+// 🔧 HowlChat.tsx - handleSend 함수 내 counselor 전달 부분
+// ========================================
+// 기존 코드 위치: handleSend 함수 내 여러 곳에서 counselor를 구하는 부분
+// 아래처럼 수정하세요.
+
+const handleSend = async (text: string, image?: string) => {
+  addUserMessage(text, image);
+
+  if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
+    addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+    updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+    setSessionTime(null);
+    setShowReview(true);
+    return;
+  }
+
+  if (session.isPaid && session.selectedMenu) {
+    if (session.questionCount >= session.maxQuestions + 1) {
+      addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
+
+      setTimeout(() => {
+        handleCrossSelling();
+      }, 1500);
+
       updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
       setSessionTime(null);
       setShowReview(true);
       return;
     }
 
-    if (session.isPaid && session.selectedMenu) {
-      if (session.questionCount >= session.maxQuestions + 1) {
-        addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
-
-        setTimeout(() => {
-          handleCrossSelling();
-        }, 1500);
-
-        updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
-        setSessionTime(null);
-        setShowReview(true);
-        return;
-      }
-
-      if (image && [2, 12].includes(session.selectedMenu.id)) {
-        setShowScan(image);
-        return;
-      }
-
-      updateSession({ questionCount: session.questionCount + 1 });
-      const counselor = getCounselorForMenu(session.selectedMenu.id);
-      await handleBotResponse(
-        text,
-        session.selectedMenu.name,
-        true,
-        image,
-        counselor.id,
-        getDbPrice(session.selectedMenu.id)
-      );
-      return;
-    }
-
-    if (!session.userName && !userProfile?.nickname) {
-      const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
-      if (name) {
-        updateSession({ userName: name });
-        setIsTyping(true);
-        await delayedTyping();
-        setIsTyping(false);
-        addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
-        return;
-      }
-      addBotMessage('이제 이야기를 시작해보자, 무슨이야기 할까? ✨');
-      return;
-    }
-
-    if (timerExpired) {
-      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
-      return;
-    }
-
-    if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
+    if (image && [2, 12].includes(session.selectedMenu.id)) {
       setShowScan(image);
       return;
     }
 
-    const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
-
+    updateSession({ questionCount: session.questionCount + 1 });
+    
+    // ✨ [핵심] session.counselorId를 명확히 전달
     await handleBotResponse(
       text,
-      session.selectedMenu?.name,
-      session.isPaid,
+      session.selectedMenu.name,
+      true,
       image,
-      counselor?.id,
-      session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
+      session.counselorId, // ← 이제 이게 확실해짐
+      getDbPrice(session.selectedMenu.id)
     );
+    return;
+  }
 
-    if (session.selectedMenu && !session.isPaid && !session.freeReadingDone) {
-      updateSession({ freeReadingDone: true });
-      setTimeout(() => {
-        addBotMessage(`이 기운의 핵심은 심층 리딩에서만 볼 수 있어! 💎\n\n지금 바로 확인해볼래?`);
-      }, 1500);
+  if (!session.userName && !userProfile?.nickname) {
+    const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
+    if (name) {
+      updateSession({ userName: name });
+      setIsTyping(true);
+      await delayedTyping();
+      setIsTyping(false);
+      addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+      return;
     }
-  };
+    addBotMessage('이제 이야기를 시작해보자, 무슨이야기 할까? ✨');
+    return;
+  }
+
+  if (timerExpired) {
+    addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
+    return;
+  }
+
+  if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
+    setShowScan(image);
+    return;
+  }
+
+  // ✨ [핵심] session.counselorId를 사용하거나, 선택된 메뉴로부터 상담사를 결정
+  const finalCounselorId = session.counselorId || 
+    (session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id).id : undefined);
+
+  await handleBotResponse(
+    text,
+    session.selectedMenu?.name,
+    session.isPaid,
+    image,
+    finalCounselorId,
+    session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
+  );
+
+  if (session.selectedMenu && !session.isPaid && !session.freeReadingDone) {
+    updateSession({ freeReadingDone: true });
+    setTimeout(() => {
+      addBotMessage(`이 기운의 핵심은 심층 리딩에서만 볼 수 있어! 💎\n\n지금 바로 확인해볼래?`);
+    }, 1500);
+  }
+};
 
 const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
