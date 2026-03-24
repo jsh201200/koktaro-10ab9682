@@ -147,7 +147,7 @@ export default function ReviewModal({ sessionId, profileId, userName, menuName, 
             }`}>
               {canEarnCredits 
                 ? '🎉 1,000원 적립금 지급!' 
-                : `100자 이상 작성 시 적립금 지급 (${100 - content.length}자 남음)`
+                : `20자 이상 작성 시 적립금 지급 (${100 - content.length}자 남음)`
               }
             </span>
           ) : (
@@ -173,7 +173,7 @@ export default function ReviewModal({ sessionId, profileId, userName, menuName, 
         {paymentPrice >= 9900 && (
           <div className="mt-3 p-2.5 rounded-lg bg-primary/10 border border-primary/20">
             <p className="text-[9px] text-primary text-center font-medium">
-              💝 100자 이상 후기 작성 시 자동으로 1,000원이 적립됩니다!
+              💝 20자 이상 후기 작성 시 자동으로 1,000원이 적립됩니다!
             </p>
           </div>
         )}
