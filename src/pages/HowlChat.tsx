@@ -277,19 +277,6 @@ export default function HowlChat() {
     return () => { supabase.removeChannel(channel); };
   }, [session.dbSessionId, session.userName, dbProducts]);
 
-  const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
-    if (menuId === 0) {
-      updateSession({
-        isPaid: true,
-        sessionExpiry: null,
-        maxQuestions: 0,
-        questionCount: 0,
-        paymentPending: false,
-      });
-      setTimerExpired(false);
-      addSystemMessage("💜 결제가 승인되었습니다!");
-      toast.success("입금 확인 완료! ✨");
-
       // 🆕 파일 최상단(컴포넌트 바깥)에 승하님의 정성 가득한 리스트 배치
 const ADVICE_MESSAGES = [
   "지금의 침체가 영원하지 않아요. 다음 달쯤이면 새로운 기회의 문이 열릴 거야. 그때를 대비해서 지금 하나씩 준비하는 게 가장 현명한 태도야. 작은 행동이 모여 큰 변화를 만들거든.",
