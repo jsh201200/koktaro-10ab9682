@@ -327,10 +327,10 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
 
 // (컴포넌트 내부 생략...)
 
-  const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
+ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
     const name = userProfile?.nickname || session.userName || '여행자';
 
-    // 💰 1,000원 상품 (오늘의 기운) 처리 로직
+    // 💰 1,000원 상품 (오늘의 기운) 처리 로직 (기존 승하님 코드 유지)
     if (menuId === 0) {
       updateSession({
         isPaid: true,
@@ -343,7 +343,6 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
       addSystemMessage("💜 입금 확인 완료! 오늘의 기운을 읽어드릴게요.");
       toast.success("기운 분석을 시작합니다! ✨");
 
-      // ✨ 승하님의 리스트에서 랜덤하게 하나씩 추출
       const advice = ADVICE_MESSAGES[Math.floor(Math.random() * ADVICE_MESSAGES.length)];
       const color = LUCKY_COLORS[Math.floor(Math.random() * LUCKY_COLORS.length)];
       const number = LUCKY_NUMBERS[Math.floor(Math.random() * LUCKY_NUMBERS.length)];
@@ -359,8 +358,6 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
 
       setTimeout(() => {
         addBotMessage(`${name}님의 오늘 하루가 별처럼 빛나길 바랄게요. 내일 또 만나요! ✨`);
-        
-        // 상담 세션 초기화 및 후기 유도
         updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
         setSessionTime(null);
         setShowReview(true);
@@ -369,13 +366,30 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
       return;
     }
 
+    // ⭐ [시간 범인 검거 및 수정] 
+    // DB에 저장된 시간(duration_minutes)을 먼저 찾고, 없으면 메뉴판 시간을 씁니다.
+    const product = dbProducts.find(p => p.menu_id === menuId);
+    const finalDuration = product?.duration_minutes || durationMin || 30;
+
     updateSession({
       isPaid: true,
-      sessionExpiry: Date.now() + durationMin * 60 * 1000,
+      // ✨ 이제 finalDuration(1분, 10분, 30분 등)이 정확히 반영됩니다!
+      sessionExpiry: Date.now() + (finalDuration * 60 * 1000), 
       maxQuestions: menuId === 16 ? 3 : 1,
       questionCount: 0,
       paymentPending: false,
     });
+
+    setTimerExpired(false);
+    addSystemMessage(`💜 결제가 승인되었습니다! ${finalDuration}분 동안 심층 리딩을 시작합니다.`);
+    toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
+
+    setTimeout(() => {
+      const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
+      const userName = session.userName || userProfile?.nickname || '';
+      addBotMessage(welcomeGuide || `${userName}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨ 궁금한 것을 말씀해줘!`);
+    }, 800);
+  }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]); // 👈 dbProducts 의존성 꼭 확인!
     setTimerExpired(false);
     addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
     toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
