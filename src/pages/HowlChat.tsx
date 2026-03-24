@@ -608,23 +608,24 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
   };
 
   const handleExitChat = async (deleteChat: boolean) => {
-    setShowExitModal(false);
+ setShowExitModal(false);
 
     if (deleteChat) {
+      // 🗑️ 대화 삭제를 선택했을 때만 실행
       await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
       addSystemMessage("대화 내용이 삭제되었습니다.");
+      
+      // 삭제 시에는 세션만 새로 생성 (로그인은 유지됨)
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+      sessionIdRef.current = newSessionId;
+      resetSession();
     }
 
-    localStorage.removeItem('howl_session_id');
-    localStorage.removeItem('howl_profile_id');
-    const newSessionId = `session_${Date.now()}_${Math.random()}`;
-    localStorage.setItem('howl_session_id', newSessionId);
-    sessionIdRef.current = newSessionId;
-
-    resetSession();
+    // ✨ 핵심: 로그아웃(removeItem, setUserProfile) 코드를 삭제했습니다.
+    // 이제 로그인 상태 그대로 메인 화면으로 이동합니다.
     setView('landing');
-    setUserProfile(null);
-    toast.info("상담을 종료했습니다 ✨");
+    toast.info("상담실을 잠시 나갑니다 ✨");
   };
 
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
