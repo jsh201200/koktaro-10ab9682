@@ -389,30 +389,13 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
     }, 800);
   }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]);
 
-    setTimerExpired(false);
-    addSystemMessage(`💜 결제가 승인되었습니다! ${finalDuration}분 동안 심층 리딩을 시작합니다.`);
-    toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
+  // ✨ 여기까지가 activatePaidMode 끝입니다! 이 바로 밑에 getDbPrice가 오면 됩니다.
 
-    setTimeout(() => {
-      const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
-      const userName = session.userName || userProfile?.nickname || '';
-      addBotMessage(welcomeGuide || `${userName}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨ 궁금한 것을 말씀해줘!`);
-    }, 800);
-  }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]); // 👈 dbProducts 의존성 꼭 확인!
-    setTimerExpired(false);
-    addSystemMessage("💜 결제가 승인되었습니다! 심층 리딩을 시작합니다.");
-    toast.success("입금 확인 완료! 상담을 이어갑니다 ✨");
-
-    // ✨ 결제 후 상담사가 먼저 웰컴 가이드 말하기
-    setTimeout(() => {
-      const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
-      const name = session.userName || userProfile?.nickname || '';
-      addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게 ✨ 궁금한 것을 말씀해줘!`);
-}, 800);
-  }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]);
-const delayedTyping = useCallback((): Promise<void> => {
+  const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
   }, []);
+
+  const getDbPrice = (menuId: number): number => {
 
   const getDbPrice = (menuId: number): number => {
     const product = dbProducts.find(p => p.menu_id === menuId);
