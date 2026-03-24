@@ -42,7 +42,242 @@ interface CouponData {
   couponActive: boolean;
 }
 
-// 🆕 승하님의 정성 가득한 조언 리스트 (원본 그대로 유지)
+export default function HowlChat() {
+  const {
+    messages, session, isTyping, setIsTyping,setMessages,
+    addBotMessage, addUserMessage, addSystemMessage,
+    updateSession, resetSession,
+  } = useChat();
+  const { settings } = useSiteSettings();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const [view, setView] = useState<'landing' | 'auth' | 'chat'>('landing');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+  const [showPremiumForm, setShowPremiumForm] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [showPremiumReport, setShowPremiumReport] = useState(false);
+  const [showScan, setShowScan] = useState<string | null>(null);
+  const [sessionTime, setSessionTime] = useState<number | null>(null);
+  const [timerExpired, setTimerExpired] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [couponData, setCouponData] = useState<CouponData>({
+    couponCode: '',
+    couponDiscount: 0,
+    couponActive: false,
+  });
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const greetingSent = useRef(false);
+  const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
+
+  // 🔐 세션 검증 및 초기화
+  useEffect(() => {
+    const validateSession = async () => {
+      const storedSessionId = localStorage.getItem('howl_session_id');
+      const storedProfileId = localStorage.getItem('howl_profile_id');
+      const lastAuthId = localStorage.getItem('howl_last_auth_id');
+      
+      if (!storedSessionId) {
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        return;
+      }
+
+      if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
+        console.warn('⚠️ 세션 사용자 변경 감지 - 새 세션 생성');
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        localStorage.removeItem('howl_profile_id');
+        localStorage.removeItem('howl_last_auth_id');
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        setUserProfile(null);
+        setView('landing');
+        toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
+        return;
+      }
+
+      if (storedProfileId) {
+        const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
+        if (data) {
+          setUserProfile({
+            id: data.id,
+            phone: data.phone,
+            nickname: data.nickname || '',
+            credits: data.credits || 0,
+            birth_date: data.birth_date || undefined,
+            birth_time: data.birth_time || undefined,
+            gender: data.gender || undefined,
+          });
+        }
+      }
+    };
+
+    validateSession();
+  }, []);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      const { data } = await supabase.from('products').select('*').eq('enabled', true).order('sort_order');
+      if (data) setDbProducts(data);
+    };
+    loadProducts();
+  }, []);
+
+  useEffect(() => {
+    const fetchCoupon = async () => {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'coupon')
+        .single();
+
+      if (data && data.value) {
+        setCouponData(data.value as CouponData);
+      }
+    };
+
+    fetchCoupon();
+
+    const channel = supabase
+      .channel('coupon-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'site_settings',
+          filter: `key=eq.coupon`,
+        },
+        (payload) => {
+          if (payload.new && payload.new.value) {
+            setCouponData(payload.new.value as CouponData);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    const profileId = localStorage.getItem('howl_profile_id');
+    if (profileId) {
+      supabase.from('user_profiles').select('*').eq('id', profileId).single().then(({ data }) => {
+        if (data) {
+          setUserProfile({
+            id: data.id,
+            phone: data.phone,
+            nickname: data.nickname || '',
+            credits: data.credits || 0,
+            birth_date: data.birth_date || undefined,
+            birth_time: data.birth_time || undefined,
+            gender: data.gender || undefined,
+          });
+        }
+      });
+    }
+  }, []);
+
+  const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
+    const hour = new Date().getHours();
+
+    let timeGreeting = '';
+    if (hour >= 5 && hour < 9) {
+      timeGreeting = '새벽부터 고민이 깊으신가 봐요';
+    } else if (hour >= 9 && hour < 12) {
+      timeGreeting = '오전이 반짝반짝한 시간이네요';
+    } else if (hour >= 12 && hour < 18) {
+      timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
+    } else if (hour >= 18 && hour < 22) {
+      timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
+    } else {
+      timeGreeting = '밤은 진실이 드러나는 시간이에요';
+    }
+
+    const counselorTones: { [key: string]: string } = {
+      'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
+      'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
+      'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨`,
+      'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙`,
+      'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂`,
+      'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자! 🔥`,
+    };
+
+    return counselorTones[counselorId] || timeGreeting;
+  }, []);
+
+  useEffect(() => {
+    if (view === 'chat' && !greetingSent.current && messages.length === 0) {
+      greetingSent.current = true;
+      const name = userProfile?.nickname || session.userName;
+      setTimeout(() => {
+        if (name && session.selectedMenu) {
+          const counselor = getCounselorForMenu(session.selectedMenu.id);
+          const icebreakerMsg = getIcebreakerMessage(counselor.id, name);
+
+          addBotMessage(`${name}님 ✨\n\n${icebreakerMsg}\n\n오늘은 어떤 운명을 들어보고 싶으신가요?`);
+        } else if (name) {
+          addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
+        } else {
+          addBotMessage(settings.welcomeMessage);
+        }
+      }, 500);
+    }
+  }, [view, messages.length, session.selectedMenu, getIcebreakerMessage, settings.welcomeMessage]);
+
+  useEffect(() => {
+    if (session.sessionExpiry && session.isPaid) {
+      setTimerExpired(false);
+      timerRef.current = setInterval(() => {
+        const remaining = Math.max(0, Math.floor((session.sessionExpiry! - Date.now()) / 1000));
+        setSessionTime(remaining);
+        if (remaining === 300) {
+          addSystemMessage("기운이 다해가고 있어! 5분 뒤면 상담이 종료되니 서둘러줘! ✨");
+        }
+        if (remaining === 60) {
+          addSystemMessage("⏰ 1분 남았어! 마지막으로 궁금한 거 물어봐줄래?");
+        }
+        if (remaining <= 0) {
+          setTimerExpired(true);
+          addSystemMessage("⏰ 상담 시간이 종료되었습니다.");
+          if (timerRef.current) clearInterval(timerRef.current);
+        }
+      }, 1000);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [session.sessionExpiry, session.isPaid, addSystemMessage]);
+
+  useEffect(() => {
+    if (!session.dbSessionId) return;
+    const channel = supabase
+      .channel('payment-approval')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'payments',
+        filter: `session_id=eq.${session.dbSessionId}`,
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (updated.status === 'approved') {
+          const product = dbProducts.find(p => p.menu_id === updated.menu_id);
+          const durationMin = product?.duration_minutes || 30;
+          activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [session.dbSessionId, session.userName, dbProducts]);
+
+      // 🆕 파일 최상단(컴포넌트 바깥)에 승하님의 정성 가득한 리스트 배치
 const ADVICE_MESSAGES = [
   "지금의 침체가 영원하지 않아요. 다음 달쯤이면 새로운 기회의 문이 열릴 거야. 그때를 대비해서 지금 하나씩 준비하는 게 가장 현명한 태도야. 작은 행동이 모여 큰 변화를 만들거든.",
   "주변의 목소리에 흔들리지 말고 자신의 직관을 믿어봐. 너는 이미 답을 알고 있어. 지금 필요한 건 다른 사람의 조언이 아니라 자신에 대한 신뢰야. 그 확신을 가지고 한 발 내딛는 것, 그게 전부야.",
@@ -84,182 +319,26 @@ const ADVICE_MESSAGES = [
   "건강은 건강할 때 지키라는 말이 뻔하게 들리겠지만, 그게 진리야. 지금 네가 무리해서 얻으려는 것들이 건강을 잃고 나서도 의미가 있을지 생각해봐. 조금 느려도 괜찮으니 네 페이스를 조절하면서 나아가자. 길게 보고 네 몸을 소중히 다루는 사람만이 결국 마지막에 활짝 웃는 승자가 될 수 있어.",
   "긍정적인 생각이 네 몸의 치유력을 높여준다는 걸 믿어봐. 아픈 곳이 있다면 자책하지 말고 '그동안 고생 많았어, 이제 괜찮아질 거야'라고 다독여주는 거야. 네 세포 하나하나가 네 목소리를 듣고 있거든. 스스로에게 건네는 따뜻한 말 한마디가 어떤 약보다 강력한 치유의 에너지를 만들어낼 거야.",
   "주변 환경을 한 번 정리해보는 건 어때? 네가 머무는 공간의 공기가 탁하면 네 건강 운세도 같이 가라앉거든. 창문을 열어 환기를 시키고 주변을 깔끔하게 치워봐. 맑은 환경에서 맑은 기운이 샘솟고, 그 기운이 네 몸을 더 생기 있게 만들어줄 거야. 작은 변화가 네 컨디션을 놀랍게 바꿔줄 거야."
+  
 ];
 
 const LUCKY_COLORS = ["보라색", "파란색", "녹색", "주황색", "분홍색", "노란색", "빨간색", "수색", "민트색", "자주색", "흰색", "검은색", "연두색", "연노랑색", "핑크색", "아이보리색", "그레이색", "금색", "은색", "딥그레이색", "버건디색", "딥블루색"];
 const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12, 23, 10, 41, 26, 44, 36, 28, 32, 20, 38, 40, 37];
 
-export default function HowlChat() {
-  const {
-    messages, session, isTyping, setIsTyping, setMessages,
-    addBotMessage, addUserMessage, addSystemMessage,
-    updateSession, resetSession,
-  } = useChat();
-  const { settings } = useSiteSettings();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+// (컴포넌트 내부 생략...)
 
-  const [view, setView] = useState<'landing' | 'auth' | 'chat'>('landing');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
-  const [showPremiumForm, setShowPremiumForm] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [showPremiumReport, setShowPremiumReport] = useState(false);
-  const [showScan, setShowScan] = useState<string | null>(null);
-  const [sessionTime, setSessionTime] = useState<number | null>(null);
-  const [timerExpired, setTimerExpired] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [dbProducts, setDbProducts] = useState<any[]>([]);
-  const [showExitModal, setShowExitModal] = useState(false);
-  const [couponData, setCouponData] = useState<CouponData>({
-    couponCode: '',
-    couponDiscount: 0,
-    couponActive: false,
-  });
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const greetingSent = useRef(false);
-  const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
-
-  useEffect(() => {
-    const validateSession = async () => {
-      const storedSessionId = localStorage.getItem('howl_session_id');
-      const storedProfileId = localStorage.getItem('howl_profile_id');
-      const lastAuthId = localStorage.getItem('howl_last_auth_id');
-      
-      if (!storedSessionId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        sessionIdRef.current = newSessionId;
-        resetSession();
-        return;
-      }
-
-      if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        localStorage.removeItem('howl_profile_id');
-        localStorage.removeItem('howl_last_auth_id');
-        sessionIdRef.current = newSessionId;
-        resetSession();
-        setUserProfile(null);
-        setView('landing');
-        toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
-        return;
-      }
-
-      if (storedProfileId) {
-        const { data } = await supabase.from('user_profiles').select('*').eq('id', storedProfileId).single();
-        if (data) {
-          setUserProfile({
-            id: data.id,
-            phone: data.phone,
-            nickname: data.nickname || '',
-            credits: data.credits || 0,
-            birth_date: data.birth_date || undefined,
-            birth_time: data.birth_time || undefined,
-            gender: data.gender || undefined,
-          });
-        }
-      }
-    };
-    validateSession();
-  }, []);
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      const { data } = await supabase.from('products').select('*').eq('enabled', true).order('sort_order');
-      if (data) setDbProducts(data);
-    };
-    loadProducts();
-  }, []);
-
-  useEffect(() => {
-    const fetchCoupon = async () => {
-      const { data } = await supabase.from('site_settings').select('value').eq('key', 'coupon').single();
-      if (data && data.value) setCouponData(data.value as CouponData);
-    };
-    fetchCoupon();
-    const channel = supabase.channel('coupon-updates').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'site_settings', filter: `key=eq.coupon` }, (payload) => {
-      if (payload.new && payload.new.value) setCouponData(payload.new.value as CouponData);
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const getIcebreakerMessage = useCallback((counselorId: string, userName: string) => {
-    const hour = new Date().getHours();
-    let timeGreeting = '';
-    if (hour >= 5 && hour < 9) timeGreeting = '새벽부터 고민이 깊으신가 봐요';
-    else if (hour >= 9 && hour < 12) timeGreeting = '오전이 반짝반짝한 시간이네요';
-    else if (hour >= 12 && hour < 18) timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
-    else if (hour >= 18 && hour < 22) timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
-    else timeGreeting = '밤은 진실이 드러나는 시간이에요';
-
-    const counselorTones: { [key: string]: string } = {
-      'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼`,
-      'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎`,
-      'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨`,
-      'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙`,
-      'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂`,
-      'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자! 🔥`,
-    };
-    return counselorTones[counselorId] || timeGreeting;
-  }, []);
-
-  useEffect(() => {
-    if (view === 'chat' && !greetingSent.current && messages.length === 0) {
-      greetingSent.current = true;
-      const name = userProfile?.nickname || session.userName;
-      setTimeout(() => {
-        if (name && session.selectedMenu) {
-          const counselor = getCounselorForMenu(session.selectedMenu.id);
-          const icebreakerMsg = getIcebreakerMessage(counselor.id, name);
-          addBotMessage(`${name}님 ✨\n\n${icebreakerMsg}\n\n오늘은 어떤 운명을 들어보고 싶으신가요?`);
-        } else if (name) {
-          addBotMessage(`${name}! 좋은 호칭이야 ✨\n\n어떤 운명의 문을 열어볼까?\n아래 '메뉴 보기' 버튼을 눌러 상담 메뉴를 확인해줘! 🔮`);
-        } else {
-          addBotMessage(settings.welcomeMessage);
-        }
-      }, 500);
-    }
-  }, [view, messages.length, session.selectedMenu, getIcebreakerMessage, settings.welcomeMessage]);
-
-  useEffect(() => {
-    if (session.sessionExpiry && session.isPaid) {
-      setTimerExpired(false);
-      timerRef.current = setInterval(() => {
-        const remaining = Math.max(0, Math.floor((session.sessionExpiry! - Date.now()) / 1000));
-        setSessionTime(remaining);
-        if (remaining === 300) addSystemMessage("기운이 다해가고 있어! 5분 뒤면 상담이 종료되니 서둘러줘! ✨");
-        if (remaining === 60) addSystemMessage("⏰ 1분 남았어! 마지막으로 궁금한 거 물어봐줄래?");
-        if (remaining <= 0) {
-          setTimerExpired(true);
-          addSystemMessage("⏰ 상담 시간이 종료되었습니다.");
-          if (timerRef.current) clearInterval(timerRef.current);
-        }
-      }, 1000);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [session.sessionExpiry, session.isPaid, addSystemMessage]);
-
-  useEffect(() => {
-    if (!session.dbSessionId) return;
-    const channel = supabase.channel('payment-approval').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'payments', filter: `session_id=eq.${session.dbSessionId}` }, (payload) => {
-      const updated = payload.new as any;
-      if (updated.status === 'approved') {
-        const product = dbProducts.find(p => p.menu_id === updated.menu_id);
-        const durationMin = product?.duration_minutes || 30;
-        activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
-      }
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [session.dbSessionId, dbProducts]);
-
-  const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
+const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
     const name = userProfile?.nickname || session.userName || '여행자';
 
+    // 💰 1,000원 상품 (오늘의 기운) 처리 로직
     if (menuId === 0) {
-      updateSession({ isPaid: true, sessionExpiry: null, maxQuestions: 0, questionCount: 0, paymentPending: false });
+      updateSession({
+        isPaid: true,
+        sessionExpiry: null,
+        maxQuestions: 0,
+        questionCount: 0,
+        paymentPending: false,
+      });
       setTimerExpired(false);
       addSystemMessage("💜 입금 확인 완료! 오늘의 기운을 읽어드릴게요.");
       toast.success("기운 분석을 시작합니다! ✨");
@@ -269,7 +348,12 @@ export default function HowlChat() {
       const number = LUCKY_NUMBERS[Math.floor(Math.random() * LUCKY_NUMBERS.length)];
 
       setTimeout(() => {
-        addBotMessage(`✨ **${name}님을 위한 오늘의 기운 리포트**\n\n🔮 **하울의 한 줄 조언**\n"${advice}"\n\n🎨 **행운의 컬러**: ${color}\n🔢 **행운의 숫자**: ${number}`);
+        addBotMessage(
+          `✨ **${name}님을 위한 오늘의 기운 리포트**\n\n` +
+          `🔮 **하울의 한 줄 조언**\n"${advice}"\n\n` +
+          `🎨 **행운의 컬러**: ${color}\n` +
+          `🔢 **행운의 숫자**: ${number}`
+        );
       }, 800);
 
       setTimeout(() => {
@@ -278,9 +362,11 @@ export default function HowlChat() {
         setSessionTime(null);
         setShowReview(true);
       }, 3500);
+
       return;
     }
 
+    // 🕒 [시간 계산 로직] DB 시간을 우선으로 가져옵니다.
     const product = dbProducts.find(p => p.menu_id === menuId);
     const finalDuration = product?.duration_minutes || durationMin || 30;
 
@@ -303,21 +389,34 @@ export default function HowlChat() {
     }, 800);
   }, [session, userProfile, updateSession, addSystemMessage, addBotMessage, setShowReview, dbProducts]);
 
+  // ✨ 여기까지가 activatePaidMode 끝입니다! 이 바로 밑에 getDbPrice가 오면 됩니다.
+
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
   }, []);
-
   const getDbPrice = (menuId: number): number => {
     const product = dbProducts.find(p => p.menu_id === menuId);
     return product?.price || 0;
   };
 
-  const handleBotResponse = useCallback(async (userInput: string, menuName?: string, isPaid?: boolean, imageBase64?: string, counselorId?: string, menuPrice?: number) => {
+  const handleBotResponse = useCallback(async (
+    userInput: string,
+    menuName?: string,
+    isPaid?: boolean,
+    imageBase64?: string,
+    counselorId?: string,
+    menuPrice?: number,
+  ) => {
     setIsTyping(true);
     try {
       await delayedTyping();
-      const history = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'bot' | 'user', content: m.content }));
-      const response = await getGeminiResponse(userInput, history, menuName, isPaid, imageBase64, counselorId, menuPrice);
+      const history = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role as 'bot' | 'user', content: m.content }));
+
+      const response = await getGeminiResponse(
+        userInput, history, menuName, isPaid, imageBase64, counselorId, menuPrice
+      );
       addBotMessage(response);
     } catch {
       addBotMessage('기운이 잠시 흔들렸어... 다시 물어봐줘! ✨');
@@ -327,7 +426,10 @@ export default function HowlChat() {
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
   const handleCrossSelling = useCallback(() => {
-    const currentCounselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : null;
+    const currentCounselor = session.selectedMenu
+      ? getCounselorForMenu(session.selectedMenu.id)
+      : null;
+
     const recommendations: { [key: string]: { name: string; specialty: string } } = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
@@ -336,28 +438,62 @@ export default function HowlChat() {
       'suhyun': { name: '명화', specialty: '실질 해결책' },
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
+
     const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
-    addBotMessage(`음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`);
-    setTimeout(() => { setIsMenuOpen(true); }, 2000);
+
+    addBotMessage(
+      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
+      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
+    );
+
+    setTimeout(() => {
+      setIsMenuOpen(true);
+    }, 2000);
   }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
 
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
-    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) return;
+
+    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
+      addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요 ✨");
+      updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+      setSessionTime(null);
+      setShowReview(true);
+      return;
+    }
+
     if (session.isPaid && session.selectedMenu) {
       if (session.questionCount >= session.maxQuestions + 1) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘! 🌟");
-        setTimeout(() => { handleCrossSelling(); }, 1500);
+
+        setTimeout(() => {
+          handleCrossSelling();
+        }, 1500);
+
         updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
         setSessionTime(null);
         setShowReview(true);
         return;
       }
+
+      if (image && [2, 12].includes(session.selectedMenu.id)) {
+        setShowScan(image);
+        return;
+      }
+
       updateSession({ questionCount: session.questionCount + 1 });
       const counselor = getCounselorForMenu(session.selectedMenu.id);
-      await handleBotResponse(text, session.selectedMenu.name, true, image, counselor.id, getDbPrice(session.selectedMenu.id));
+      await handleBotResponse(
+        text,
+        session.selectedMenu.name,
+        true,
+        image,
+        counselor.id,
+        getDbPrice(session.selectedMenu.id)
+      );
       return;
     }
+
     if (!session.userName && !userProfile?.nickname) {
       const name = text.trim().replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim();
       if (name) {
@@ -371,42 +507,129 @@ export default function HowlChat() {
       addBotMessage('이제 이야기를 시작해보자, 무슨이야기 할까? ✨');
       return;
     }
-    if (timerExpired) { addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨'); return; }
+
+    if (timerExpired) {
+      addBotMessage('⏰ 상담 시간이 종료됐어! 더 깊은 상담을 원한다면 연장 결제를 해줘! ✨');
+      return;
+    }
+
+    if (image && session.selectedMenu && [2, 12].includes(session.selectedMenu.id)) {
+      setShowScan(image);
+      return;
+    }
+
     const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
-    await handleBotResponse(text, session.selectedMenu?.name, session.isPaid, image, counselor?.id, session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined);
+
+    await handleBotResponse(
+      text,
+      session.selectedMenu?.name,
+      session.isPaid,
+      image,
+      counselor?.id,
+      session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
+    );
+
     if (session.selectedMenu && !session.isPaid && !session.freeReadingDone) {
       updateSession({ freeReadingDone: true });
-      setTimeout(() => { addBotMessage(`이 기운의 핵심은 심층 리딩에서만 볼 수 있어! 💎\n\n지금 바로 확인해볼래?`); }, 1500);
+      setTimeout(() => {
+        addBotMessage(`이 기운의 핵심은 심층 리딩에서만 볼 수 있어! 💎\n\n지금 바로 확인해볼래?`);
+      }, 1500);
     }
   };
 
   const handleMenuSelect = async (menu: Menu) => {
     setIsMenuOpen(false);
+
     const counselor = getCounselorForMenu(menu.id);
-    const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
-    setMessages([]); 
-    greetingSent.current = false; 
-    const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
-    const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
-    updateSession({ selectedMenu: actualMenu, freeReadingDone: false, questionCount: 0, imageFailCount: 0, userName: session.userName || userProfile?.nickname || '', roomId, counselorId: counselor.id });
+  const roomId = `room_${counselor.id}_${userProfile?.id || 'guest'}`;
+
+  // ✨ 1. 화면에 남아있는 이전 상담사의 메시지를 즉시 지워줍니다.
+  // (useChat에서 자동으로 비워주기도 하지만, 여기서 미리 비워야 화면이 더 깔끔해요!)
+  setMessages([]); 
+
+  // ✨ 2. 인사말을 이미 보냈다는 기억을 리셋합니다. 
+  // 그래야 새 상담사가 "반가워요!" 하고 첫 인사를 건넵니다.
+  greetingSent.current = false; 
+
+  const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+  const actualMenu = dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu;
+    updateSession({
+      selectedMenu: actualMenu,
+      freeReadingDone: false,
+      questionCount: 0,
+      imageFailCount: 0,
+      userName: session.userName || userProfile?.nickname || '',
+      roomId, // 이제 분리된 방으로 입장합니다!
+      counselorId: counselor.id,
+    });
+    
+    // ... (이하 동일)
+
     if (menu.id === 0) {
-      if (loadSettings().testMode) { activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price); return; }
-      setShowPayment(true); return;
+      // ✨ 테스트 모드면 결제 스킵
+      if (loadSettings().testMode) {
+        activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
+        addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
+        return;
+      }
+      setShowPayment(true);
+      return;
     }
-    if (menu.id === 16) { setShowPremiumForm(true); return; }
-    if (loadSettings().testMode) { activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price); return; }
+
+    if (menu.id === 16) {
+      setShowPremiumForm(true);
+      return;
+    }
+
+    // ✨ 테스트 모드면 결제 스킵하고 상담사가 먼저 말 걸기
+    if (loadSettings().testMode) {
+      activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
+      addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
+      setTimeout(() => {
+        const welcomeGuide = MENU_WELCOME_GUIDES[menu.id];
+        const name = session.userName || userProfile?.nickname || '';
+        addBotMessage(welcomeGuide || `${name}님, ${actualMenu.name} 상담을 시작할게요! 궁금한 것을 말씀해주세요 ✨`);
+      }, 800);
+      return;
+    }
+
+    // ✨ 모든 메뉴 결제창 띄우기
     setShowPayment(true);
   };
 
   const handleScanComplete = async () => {
-    const image = showScan; setShowScan(null); if (!image) return;
+    const image = showScan;
+    setShowScan(null);
+    if (!image) return;
+
     const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
-    await handleBotResponse('사진을 분석해줘', session.selectedMenu?.name, session.isPaid, image, counselor?.id, session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined);
+    await handleBotResponse(
+      '사진을 분석해줘',
+      session.selectedMenu?.name,
+      session.isPaid,
+      image,
+      counselor?.id,
+      session.selectedMenu ? getDbPrice(session.selectedMenu.id) : undefined,
+    );
   };
 
   const handleExitChat = async (deleteChat: boolean) => {
-    setShowExitModal(false);
-    if (deleteChat) { await supabase.from('messages').delete().eq('session_id', session.dbSessionId); resetSession(); }
+ setShowExitModal(false);
+
+    if (deleteChat) {
+      // 🗑️ 대화 삭제를 선택했을 때만 실행
+      await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
+      addSystemMessage("대화 내용이 삭제되었습니다.");
+      
+      // 삭제 시에는 세션만 새로 생성 (로그인은 유지됨)
+      const newSessionId = `session_${Date.now()}_${Math.random()}`;
+      localStorage.setItem('howl_session_id', newSessionId);
+      sessionIdRef.current = newSessionId;
+      resetSession();
+    }
+
+    // ✨ 핵심: 로그아웃(removeItem, setUserProfile) 코드를 삭제했습니다.
+    // 이제 로그인 상태 그대로 메인 화면으로 이동합니다.
     setView('landing');
     toast.info("상담실을 잠시 나갑니다 ✨");
   };
@@ -414,108 +637,344 @@ export default function HowlChat() {
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
     const menu = session.selectedMenu!;
     setShowPayment(false);
+
     const dbPrice = getDbPrice(menu.id);
-    let discountAmount = 0; let finalPrice = dbPrice;
+    let discountAmount = 0;
+    let discountType = '';
+    let finalPrice = dbPrice;
+
     if (couponData.couponActive && couponData.couponCode && dbPrice >= 9900) {
-      discountAmount = couponData.couponDiscount; finalPrice = Math.max(0, dbPrice - discountAmount);
+      discountAmount = couponData.couponDiscount;
+      discountType = 'site_coupon';
+      finalPrice = Math.max(0, dbPrice - discountAmount);
     }
+
+    const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
+
     await supabase.from('payments').insert({
-      session_id: session.dbSessionId, user_nickname: session.userName || userProfile?.nickname || '',
-      menu_name: menu.name, menu_id: menu.id, price: dbPrice, method, depositor, phone_tail: phoneTail, status: 'pending', discount_amount: discountAmount, final_price: finalPrice,
+      session_id: session.dbSessionId,
+      user_nickname: session.userName || userProfile?.nickname || '',
+      menu_name: menu.name,
+      menu_id: menu.id,
+      price: dbPrice,
+      method,
+      depositor,
+      phone_tail: phoneTail,
+      chat_log: chatLog,
+      status: 'pending',
+      discount_amount: discountAmount,
+      discount_type: discountType,
+      final_price: finalPrice,
     });
+
     updateSession({ paymentPending: true });
-    sendDiscordAlert({ userName: session.userName || userProfile?.nickname || '', menuName: menu.name, menuId: menu.id, price: finalPrice, method, depositor, phoneTail });
-    if (method === 'kakaopay') addBotMessage(`카카오페이 결제 링크가 열렸어! 결제 금액: ${finalPrice.toLocaleString()}원`);
-    else addBotMessage(`입금 확인 요청을 보냈어! 금액: ${finalPrice.toLocaleString()}원`);
+
+    sendDiscordAlert({
+      userName: session.userName || userProfile?.nickname || '',
+      menuName: menu.name,
+      menuId: menu.id,
+      price: finalPrice,
+      method,
+      depositor,
+      phoneTail,
+    });
+
+    if (method === 'kakaopay') {
+      addSystemMessage('카카오페이 결제 요청이 전송되었습니다');
+      addBotMessage(`카카오페이 결제 링크가 열렸어! 관리자가 확인 중이니 잠시만 기다려줘 ✨\n\n결제 금액: ${finalPrice.toLocaleString()}원${discountAmount > 0 ? ` (${discountAmount.toLocaleString()}원 할인 적용)` : ''}`);
+    } else {
+      addSystemMessage('무통장 입금 확인 요청이 전송되었습니다');
+      addBotMessage(`입금 확인 요청을 보냈어! ✨\n\n금액: ${finalPrice.toLocaleString()}원${discountAmount > 0 ? ` (${discountAmount.toLocaleString()}원 할인)` : ''}\n\n관리자가 확인하면 바로 상담을 이어갈게!`);
+    }
   };
 
   const handlePremiumSubmit = async (questions: string[], depositor: string, phoneTail: string) => {
     setShowPremiumForm(false);
     const dbProduct = dbProducts.find(p => p.menu_id === 16);
     const price = dbProduct?.price || 59000;
-    updateSession({ selectedMenu: { id: 16, name: dbProduct?.name || '종합운명분석', price } as Menu, paymentPending: true });
-    await supabase.from('payments').insert({ session_id: session.dbSessionId, user_nickname: session.userName || userProfile?.nickname || '', menu_name: '종합운명분석', menu_id: 16, price, method: 'premium', depositor, phone_tail: phoneTail, status: 'pending' });
-    sendDiscordAlert({ userName: session.userName || userProfile?.nickname || '', menuName: '종합운명분석', menuId: 16, price, method: 'premium', depositor, phoneTail, questions });
-    addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨`);
+    const menu = { id: 16, name: dbProduct?.name || '종합운명분석', price } as Menu;
+    updateSession({ selectedMenu: menu, paymentPending: true });
+
+    const chatLog = messages.map(m => `[${m.role}] ${m.content}`);
+
+    await supabase.from('payments').insert({
+      session_id: session.dbSessionId,
+      user_nickname: session.userName || userProfile?.nickname || '',
+      menu_name: menu.name,
+      menu_id: 16,
+      price,
+      method: 'premium',
+      depositor,
+      phone_tail: phoneTail,
+      chat_log: chatLog,
+      questions,
+      status: 'pending',
+    });
+
+    sendDiscordAlert({
+      userName: session.userName || userProfile?.nickname || '',
+      menuName: menu.name,
+      menuId: 16,
+      price,
+      method: 'premium',
+      depositor,
+      phoneTail,
+      questions,
+    });
+
+    addSystemMessage('💎 프리미엄 상담 신청이 접수되었습니다');
+    addBotMessage(`프리미엄 종합운명분석 신청이 완료됐어! ✨\n\n금액: ${price.toLocaleString()}원\n\n결제 확인 후 심층 리포트를 작성해줄게!`);
   };
 
   const handleAuthComplete = (profile: UserProfile) => {
     setUserProfile(profile);
     localStorage.setItem('howl_profile_id', profile.id);
     localStorage.setItem('howl_last_auth_id', profile.id);
+    localStorage.setItem('howl_last_auth_time', Date.now().toString());
+    
     updateSession({ userName: profile.nickname });
-    setView('landing');
+
+    if (session.dbSessionId) {
+      supabase.from('chat_sessions').update({ profile_id: profile.id, user_nickname: profile.nickname }).eq('id', session.dbSessionId);
+    }
+
+setView('landing');
   };
 
+// ✨ 로그인 상태를 확인해서 메인으로 보낼지, 로그인창으로 보낼지 결정합니다.
   const handleStartChat = (menuId?: number, counselorId?: string) => {
+    // 🔍 핵심: userProfile이 있거나 로컬스토리지에 아이디가 저장되어 있다면 "이미 로그인된 상태"입니다.
     const isLoggedIn = !!userProfile || !!localStorage.getItem('howl_profile_id');
-    if (!isLoggedIn) setView('auth');
-    else {
+
+    if (!isLoggedIn) {
+      // 로그인 안 됐을 때만 번호 입력창(auth)으로 보냄
+      setView('auth');
+    } else {
+      // 이미 로그인 됐다면 바로 채팅창(chat)으로 보냄!
       setView('chat');
-      if (counselorId) updateSession({ counselorId });
+      
+      if (counselorId) {
+        updateSession({ counselorId });
+      }
+
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
-        if (menu) setTimeout(() => handleMenuSelect(menu), 500);
+        if (menu) {
+          const finalCounselorId = counselorId || getCounselorForMenu(menu.id).id;
+          updateSession({ counselorId: finalCounselorId });
+          setTimeout(() => handleMenuSelect(menu), 500);
+        }
       }
     }
   };
 
-  if (view === 'landing') return (
-    <>
-      <LandingPage onStartChat={handleStartChat} couponActive={couponData.couponActive} userCredits={userProfile?.credits || 0} userName={userProfile?.nickname || ''} onCheckCredits={() => { if (!userProfile) setView('auth'); else toast.info(`현재 적립금: ${userProfile.credits.toLocaleString()}원`); }} />
-      <button onClick={() => navigate('/admin')} className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"><Settings className="w-4 h-4 text-muted-foreground" /></button>
-    </>
-  );
+  if (view === 'landing') {
+    return (
+      <>
+        <LandingPage
+          onStartChat={handleStartChat}
+          couponActive={couponData.couponActive && !!couponData.couponCode}
+          userCredits={userProfile?.credits || 0}
+          userName={userProfile?.nickname || ''}
+          onCheckCredits={() => {
+            if (!userProfile) {
+              setView('auth');
+            } else {
+              toast.info(`현재 적립금: ${userProfile.credits.toLocaleString()}원`);
+            }
+          }}
+        />
+        <button
+          onClick={() => navigate('/admin')}
+          className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
+          title="관리자 대시보드"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </>
+    );
+  }
 
-  if (view === 'auth') return <div className="min-h-svh aurora-bg"><PhoneAuth onAuth={handleAuthComplete} onSkip={() => setView('chat')} /></div>;
+  if (view === 'auth') {
+    return (
+      <div className="min-h-svh aurora-bg">
+        <PhoneAuth
+          onAuth={handleAuthComplete}
+          onSkip={() => setView('chat')}
+        />
+      </div>
+    );
+  }
 
-  const currentCounselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : session.counselorId ? COUNSELORS.find(c => c.id === session.counselorId) || null : null;
+  // ✨ selectedMenu가 있으면 메뉴 기반, 없으면 counselorId로 상담사 찾기
+  const currentCounselor = session.selectedMenu
+    ? getCounselorForMenu(session.selectedMenu.id)
+    : session.counselorId
+      ? COUNSELORS.find(c => c.id === session.counselorId) || null
+      : null;
 
   return (
     <div className="min-h-svh aurora-bg">
-      <ChatHeader sessionTime={sessionTime} counselorName={currentCounselor?.name} counselorImage={currentCounselor?.image} onBack={() => setView('landing')} onExit={() => setShowExitModal(true)} />
+      <ChatHeader
+        sessionTime={sessionTime}
+        counselorName={currentCounselor?.name}
+        counselorImage={currentCounselor?.image}
+        onBack={() => setView('landing')}
+        onExit={() => setShowExitModal(true)}
+      />
+
       {showExitModal && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowExitModal(false)} />
           <div className="relative glass-strong rounded-3xl p-6 max-w-sm w-full shadow-2xl glow-border text-center">
             <h3 className="font-display text-lg font-bold text-foreground mb-3">상담을 종료할까요?</h3>
+            <p className="text-sm text-muted-foreground mb-6">대화 내용을 어떻게 할까요?</p>
             <div className="flex gap-3">
-              <button onClick={() => handleExitChat(false)} className="flex-1 py-2.5 rounded-2xl glass text-sm font-semibold hover:bg-muted/40 transition-colors">이어하기</button>
-              <button onClick={() => handleExitChat(true)} className="flex-1 py-2.5 rounded-2xl bg-destructive/20 text-destructive text-sm font-semibold hover:bg-destructive/30 transition-colors">삭제하기</button>
+              <button
+                onClick={() => handleExitChat(false)}
+                className="flex-1 py-2.5 rounded-2xl glass text-sm font-semibold hover:bg-muted/40 transition-colors"
+              >
+                이어하기
+              </button>
+              <button
+                onClick={() => handleExitChat(true)}
+                className="flex-1 py-2.5 rounded-2xl bg-destructive/20 text-destructive text-sm font-semibold hover:bg-destructive/30 transition-colors"
+              >
+                삭제하기
+              </button>
             </div>
           </div>
         </div>
       )}
-      {session.isPaid && (sessionTime !== null || timerExpired) && <ConsultTimer seconds={sessionTime || 0} expired={timerExpired} onExtend={() => setShowPayment(true)} isAlert={sessionTime !== null && sessionTime <= 300} />}
+
+      {session.isPaid && (sessionTime !== null || timerExpired) && (
+        <ConsultTimer
+          seconds={sessionTime || 0}
+          expired={timerExpired}
+          onExtend={() => setShowPayment(true)}
+          isAlert={sessionTime !== null && sessionTime <= 300}
+        />
+      )}
+
       <main className="pt-20 pb-36 px-4 max-w-2xl mx-auto space-y-4">
-        {showScan && <ScanAnimation image={showScan} onComplete={handleScanComplete} />}
+        {showScan && (
+          <ScanAnimation image={showScan} onComplete={handleScanComplete} />
+        )}
+
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} counselorImage={currentCounselor?.image} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              counselorImage={currentCounselor?.image}
+            />
           ))}
         </AnimatePresence>
         {isTyping && <TypingIndicator counselorImage={currentCounselor?.image} />}
         <div ref={chatEndRef} />
       </main>
-      <ChatInput onSend={handleSend} onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} disabled={isTyping || timerExpired} placeholder={timerExpired ? '상담 시간이 종료되었습니다' : !session.userName && !userProfile?.nickname ? '호칭을 입력해줘...' : '메시지 보내기...'} />
+
+      <ChatInput
+        onSend={handleSend}
+        onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
+        disabled={isTyping || timerExpired}
+        placeholder={
+          timerExpired ? '상담 시간이 종료되었습니다'
+            : !session.userName && !userProfile?.nickname ? '호칭을 입력해줘...'
+              : '메시지 보내기...'
+        }
+      />
+
       {session.freeReadingDone && !session.isPaid && session.selectedMenu && (
         <div className="fixed bottom-[120px] w-full px-4 z-40">
           <div className="max-w-2xl mx-auto">
-            <button onClick={() => { if (session.selectedMenu?.id === 16) setShowPremiumForm(true); else setShowPayment(true); }} className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg animate-pulse">💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)</button>
+            <button
+              onClick={() => {
+                if (session.selectedMenu?.id === 16) {
+                  setShowPremiumForm(true);
+                } else {
+                  setShowPayment(true);
+                }
+              }}
+              className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg glow-border-hover transition-all active:scale-[0.98] animate-pulse"
+            >
+              💎 결제하고 계속보기 ({getDbPrice(session.selectedMenu.id).toLocaleString()}원)
+            </button>
           </div>
         </div>
       )}
-      <AnimatePresence>{isMenuOpen && <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} counselorId={currentCounselor?.id} />}</AnimatePresence>
+
+      <AnimatePresence>
+        {isMenuOpen && (
+          <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} counselorId={currentCounselor?.id} />
+        )}
+      </AnimatePresence>
+
       {showPayment && session.selectedMenu && (
-        <PaymentModal menu={{ ...session.selectedMenu, price: getDbPrice(session.selectedMenu.id) }} userName={session.userName || userProfile?.nickname || ''} onClose={() => setShowPayment(false)} onPaymentSubmit={handlePaymentSubmit} couponActive={couponData.couponActive} couponCode={couponData.couponCode} couponDiscount={couponData.couponDiscount} userCredits={userProfile?.credits || 0} />
+        <PaymentModal
+          menu={{ ...session.selectedMenu, price: getDbPrice(session.selectedMenu.id) }}
+          userName={session.userName || userProfile?.nickname || ''}
+          onClose={() => setShowPayment(false)}
+          onPaymentSubmit={handlePaymentSubmit}
+          couponActive={couponData.couponActive && !!couponData.couponCode}
+          couponCode={couponData.couponCode}
+          couponDiscount={couponData.couponDiscount}
+          userCredits={userProfile?.credits || 0}
+        />
       )}
-      {showPremiumForm && <PremiumForm userName={session.userName || userProfile?.nickname || ''} onSubmit={handlePremiumSubmit} onClose={() => setShowPremiumForm(false)} />}
-      {showReview && userProfile && session.dbSessionId && session.selectedMenu && (
-        <ReviewModal sessionId={session.dbSessionId} profileId={userProfile.id} userName={userProfile.nickname} menuName={session.selectedMenu.name} paymentPrice={getDbPrice(session.selectedMenu.id)} onClose={() => { setShowReview(false); if (session.selectedMenu?.id === 16) setShowPremiumReport(true); else toast.success("상담이 종료되었습니다. 또 놀러오세요! ✨"); }} />
+
+      {showPremiumForm && (
+        <PremiumForm
+          userName={session.userName || userProfile?.nickname || ''}
+          onSubmit={handlePremiumSubmit}
+          onClose={() => setShowPremiumForm(false)}
+        />
       )}
-      {showPremiumReport && <PremiumReport counselorName={currentCounselor?.name || ''} menuName={session.selectedMenu?.name || ''} userName={userProfile?.nickname || ''} chatMessages={messages} onClose={() => setShowPremiumReport(false)} />}
+
+     {/* ✨ 수정된 리뷰 모달 부분: 프리미엄 메뉴일 때만 리포트를 띄웁니다 */}
+{showReview && userProfile && session.dbSessionId && session.selectedMenu && (
+  <ReviewModal
+    sessionId={session.dbSessionId}
+    profileId={userProfile.id}
+    userName={userProfile.nickname}
+    menuName={session.selectedMenu.name}
+    paymentPrice={getDbPrice(session.selectedMenu.id)}
+    onClose={() => {
+      setShowReview(false);
+      // 💎 메뉴 ID가 16(프리미엄 종합분석)일 때만 리포트 창을 엽니다.
+      if (session.selectedMenu?.id === 16) {
+        setShowPremiumReport(true);
+      } else {
+        // 일반 메뉴는 리포트 없이 그냥 종료 (필요시 알림창 추가 가능)
+        toast.success("상담이 종료되었습니다. 또 놀러오세요! ✨");
+      }
+    }}
+  />
+)}
+
+{/* 📄 리포트 창에 대화 내용(messages)을 확실히 넘겨줍니다 */}
+{showPremiumReport && (
+  <PremiumReport
+    counselorName={currentCounselor?.name || ''}
+    menuName={session.selectedMenu?.name || ''}
+    userName={userProfile?.nickname || ''}
+    chatMessages={messages} // 👈 이 messages가 있어야 리포트에 글자가 나옵니다!
+    onClose={() => setShowPremiumReport(false)}
+  />
+)}
+
+      <button
+        onClick={() => navigate('/admin')}
+        className="fixed top-3 right-3 z-[60] p-2 rounded-full glass hover:bg-muted/60 transition-colors"
+        title="관리자 대시보드"
+      >
+        <Settings className="w-4 h-4 text-muted-foreground" />
+      </button>
+
       <div className="fixed bottom-0 w-full text-center pb-1 z-30 pointer-events-none">
-        <p className="text-[8px] text-muted-foreground/60 max-w-2xl mx-auto px-4">본 서비스는 데이터 분석을 기반으로 한 인사이트 에듀테인먼트 콘텐츠이며, 상담 결과는 자기 탐색을 위한 참고 자료일 뿐 법적 책임을 보장하지 않습니다.</p>
+        <p className="text-[8px] text-muted-foreground/60 max-w-2xl mx-auto px-4">
+          본 서비스는 데이터 분석을 기반으로 한 인사이트 에듀테인먼트 콘텐츠이며, 상담 결과는 자기 탐색을 위한 참고 자료일 뿐 법적 책임을 보장하지 않습니다.
+        </p>
       </div>
     </div>
   );
