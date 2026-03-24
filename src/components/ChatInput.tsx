@@ -56,7 +56,7 @@ export default function ChatInput({ onSend, onMenuToggle, disabled, placeholder 
             onKeyDown={handleKeyDown}
             disabled={disabled}
             className="w-full p-3.5 pr-20 rounded-2xl glass-strong text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground"
-            placeholder={placeholder || '하울에게 메시지 보내기...'}
+            placeholder={placeholder || '콕콕에게 메시지 보내기...'}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
