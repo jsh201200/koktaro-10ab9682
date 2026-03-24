@@ -735,14 +735,18 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
 setView('landing');
   };
 
-  // ✨ 상담 시작 및 이어하기 처리 (얼굴 안 나오는 오류 수정 완료!)
+// ✨ 로그인 상태를 확인해서 메인으로 보낼지, 로그인창으로 보낼지 결정합니다.
   const handleStartChat = (menuId?: number, counselorId?: string) => {
-    if (!userProfile && !localStorage.getItem('howl_profile_id')) {
+    // 🔍 핵심: userProfile이 있거나 로컬스토리지에 아이디가 저장되어 있다면 "이미 로그인된 상태"입니다.
+    const isLoggedIn = !!userProfile || !!localStorage.getItem('howl_profile_id');
+
+    if (!isLoggedIn) {
+      // 로그인 안 됐을 때만 번호 입력창(auth)으로 보냄
       setView('auth');
     } else {
+      // 이미 로그인 됐다면 바로 채팅창(chat)으로 보냄!
       setView('chat');
       
-      // ✨ 핵심: 이어하기 시에도 상담사 정보를 즉시 세팅합니다.
       if (counselorId) {
         updateSession({ counselorId });
       }
@@ -750,10 +754,8 @@ setView('landing');
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
         if (menu) {
-          // 상담사 ID가 없으면 메뉴에서 찾아서 넣어줍니다.
           const finalCounselorId = counselorId || getCounselorForMenu(menu.id).id;
           updateSession({ counselorId: finalCounselorId });
-          
           setTimeout(() => handleMenuSelect(menu), 500);
         }
       }
