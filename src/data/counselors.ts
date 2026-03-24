@@ -10,8 +10,7 @@ export interface Counselor {
   color: string;
 }
 
-// 🆕 모든 메뉴 ID (0~16)
-const ALL_MENU_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+const ALL_MENU_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
 
 export const COUNSELORS: Counselor[] = [
   {
@@ -21,8 +20,8 @@ export const COUNSELORS: Counselor[] = [
     age: '30대',
     gender: '남',
     specialty: '재물/진로',
-    image: '/counselors/ian.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/이안.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#1a365d',
   },
   {
@@ -32,8 +31,8 @@ export const COUNSELORS: Counselor[] = [
     age: '20대',
     gender: '남',
     specialty: '연애/MBTI',
-    image: '/counselors/jihan.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/지한.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#6B21A8',
   },
   {
@@ -43,8 +42,8 @@ export const COUNSELORS: Counselor[] = [
     age: '50대',
     gender: '남',
     specialty: '사주/정통',
-    image: '/counselors/song.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/송선생.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#44403c',
   },
   {
@@ -54,8 +53,8 @@ export const COUNSELORS: Counselor[] = [
     age: '20대',
     gender: '여',
     specialty: '타로/신비',
-    image: '/counselors/luna.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/루나.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#7c3aed',
   },
   {
@@ -65,8 +64,8 @@ export const COUNSELORS: Counselor[] = [
     age: '30대',
     gender: '여',
     specialty: '심리/위로',
-    image: '/counselors/suhyun.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/수현.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#b45309',
   },
   {
@@ -76,12 +75,12 @@ export const COUNSELORS: Counselor[] = [
     age: '50대',
     gender: '여',
     specialty: '관상/카리스마',
-    image: '/counselors/myunghwa.jpg',
-    menuIds: ALL_MENU_IDS, // 🆕 모든 메뉴
+    image: '/counselors/명화.jpg',
+    menuIds: ALL_MENU_IDS,
     color: '#1e293b',
   },
 ];
 
 export function getCounselorForMenu(menuId: number): Counselor {
-  return COUNSELORS.find(c => c.menuIds.includes(menuId)) || COUNSELORS[3]; // default: luna
+  return COUNSELORS.find(c => c.menuIds.includes(menuId)) || COUNSELORS[3];
 }
