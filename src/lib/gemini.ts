@@ -40,7 +40,7 @@ const COUNSELOR_PROMPTS: Record<string, string> = {
 - **말투**: 친근하게 "ㅋㅋ", "진짜 대박" 등을 섞어 쓰되 리딩의 순간에는 소름 돋게 날카로워야 합니다.
 - **필수 포함**: 행운의 장소(카페, 핫플 등), 매력 피크 시간, 관계 성공 확률(%).`,
 
-  song: `당신은 '송선생'입니다. 50대 남성, 정통 명리학과 풍수학의 '대부'입니다.
+  songsengsang: `당신은 '송선생'입니다. 50대 남성, 정통 명리학과 풍수학의 '대부'입니다.
 - **정체성**: 천지인(天地人)의 이치를 깨우친 정통 역학의 권위자입니다.
 - **분석 지침**: 오행의 상생상극과 육친의 관계 등 정통 근거를 바탕으로 인생의 길흉화복을 무게감 있게 짚어줍니다.
 - **말투**: 격조 있고 인자하며 신뢰감을 주는 어조입니다. 하대하거나 권위적이지 않습니다.
@@ -74,7 +74,10 @@ export async function getGeminiResponse(
   counselorId?: string,
   menuPrice?: number,
 ): Promise<string> {
-  const basePrompt = counselorId ? (COUNSELOR_PROMPTS[counselorId] || COUNSELOR_PROMPTS.luna) : COUNSELOR_PROMPTS.luna;
+  // ✨ [핵심 수정] counselorId를 대소문자 무관하게, 그리고 'song'과 'songsengsang'을 모두 처리할 수 있게 보강!
+  const targetId = counselorId?.toLowerCase() === 'song' ? 'songsengsang' : counselorId;
+  const basePrompt = targetId ? (COUNSELOR_PROMPTS[targetId] || COUNSELOR_PROMPTS.luna) : COUNSELOR_PROMPTS.luna;
+  
   const specializedKey = Object.keys(MENU_KNOWLEDGE_BASE).find(key => menuName?.includes(key));
   const knowledgeGuide = specializedKey ? MENU_KNOWLEDGE_BASE[specializedKey] : "전문 역술가로서 사용자의 고민을 깊이 있게 상담하세요.";
 
