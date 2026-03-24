@@ -11,7 +11,7 @@ export interface Menu {
 }
 
 export const MENUS: Menu[] = [
-  { id: 0, category: 'A', categoryName: '입구', name: '콕타로 한 뼘 운세', icon: '🐣', desc: '오늘 하루 럭키 컬러 & 음식!', detailDesc: '딱 오늘 하루의 기운만 짧고 굵게 리딩해주는 스낵 상담! 럭키 컬러, 럭키 음식, 한 줄 부적까지!', price: 1000, isSnack: true },
+  { id: 0, category: 'A', categoryName: '입구', name: '콕타로 한 뼘 운세', icon: '🐣', desc: '오늘 하루 럭키 컬러 & 넘버!', detailDesc: '딱 오늘 하루의 기운만 짧고 굵게 리딩해주는 스낵 상담! 럭키 컬러, 럭키 음식, 한 줄 부적까지!', price: 1000, isSnack: true },
   { id: 1, category: 'A', categoryName: '입구', name: '성명학', icon: '✍️', desc: '이름에 숨겨진 기운 분석', detailDesc: '한자 이름의 획수와 오행을 계산하여 타고난 기운과 성격을 팩폭합니다.', price: 4900 },
   { id: 2, category: 'A', categoryName: '입구', name: '관상/손금', icon: '👁️', desc: '얼굴과 손에 새겨진 운명', detailDesc: '얼굴 특징이나 손금 모양으로 현재 운의 흐름을 분석합니다.', price: 4900 },
   { id: 3, category: 'A', categoryName: '입구', name: 'MBTI 심리', icon: '🧠', desc: '동양 오행과 만난 MBTI', detailDesc: 'MBTI 유형을 음양오행과 결합한 현대판 사주 풀이입니다.', price: 4900 },
@@ -38,7 +38,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const MENU_WELCOME_GUIDES: Record<number, string> = {
-  0: "오늘 하루, 네게 어울리는 럭키 컬러와 럭키 음식, 그리고 한 줄 부적을 선물해줄게! 🐣 가벼운 마음으로 오늘의 기운을 받아가~",
+  0: "오늘 하루, 네게 어울리는 럭키 컬러와 럭키 넘버, 그리고 한 줄 부적을 선물해줄게! 🐣 가벼운 마음으로 오늘의 기운을 받아가~",
   1: "네 이름 속에 숨겨진 운명의 바코드를 읽어볼게. 한자 이름의 획수와 오행이 네 성격과 기운을 어떻게 빚어냈는지, 소름 돋는 팩폭 리딩을 준비했어. 네 진짜 이름(한자 포함)을 알려줄래? ✨",
   2: "네 얼굴과 손에는 네가 살아온 길과 다가올 복이 그대로 새겨져 있어. 거울을 보듯 네 이목구비의 특징이나 손금 모양을 자세히 묘사해줘. 그 속에 담긴 운의 흐름을 읽어줄게! 🖐️",
   3: "현대적인 MBTI를 고대 동양의 음양오행으로 재해석해볼까? 네 성격 유형이 동양 철학적으로 어떤 기운을 가졌는지, 너조차 몰랐던 네 본질을 현대판 사주로 풀어줄게. 네 MBTI는 뭐야? 🧠",
