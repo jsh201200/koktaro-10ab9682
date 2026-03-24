@@ -81,29 +81,26 @@ export default function HowlChat() {
     couponDiscount: 0,
     couponActive: false,
   });
+  const [testMode, setTestMode] = useState(false);
+  
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const greetingSent = useRef(false);
+  const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
 
-// 🧪 [시스템 핵심] 테스트 모드 및 관리자 상태 전역 연동
-  const [testMode, setTestMode] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const greetingSent = useRef(false);
-  const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
-
-  // 🔐 [보안/인증 로직] 사용자 세션 및 프로필 정밀 검증
-  useEffect(() => {
-    const validateSession = async () => {
-      const storedSessionId = localStorage.getItem('howl_session_id');
-      const storedProfileId = localStorage.getItem('howl_profile_id');
-      const lastAuthId = localStorage.getItem('howl_last_auth_id');
-      
-      if (!storedSessionId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        sessionIdRef.current = newSessionId;
-        resetSession();
-        return;
+  // 🔐 세션 검증 및 초기화
+  useEffect(() => {
+    const validateSession = async () => {
+      const storedSessionId = localStorage.getItem('howl_session_id');
+      const storedProfileId = localStorage.getItem('howl_profile_id');
+      const lastAuthId = localStorage.getItem('howl_last_auth_id');
+      
+      if (!storedSessionId) {
+        const newSessionId = `session_${Date.now()}_${Math.random()}`;
+        localStorage.setItem('howl_session_id', newSessionId);
+        sessionIdRef.current = newSessionId;
+        resetSession();
+        return;
       }
 
       if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
@@ -139,48 +136,51 @@ export default function HowlChat() {
     validateSession();
   }, []);
 
-   // 🧪 [실시간 통신 로직] testMode 및 관리자 설정 즉각 연동
-  useEffect(() => {
-    const fetchAndSubscribeSystem = async () => {
-      // 1. 초기 상태 가져오기 (DB 우선순위)
-      const { data: initialData } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'testMode')
-        .single();
+  useEffect(() => {
+    const loadProducts = async () => {
+      const { data } = await supabase.from('products').select('*').eq('enabled', true).order('sort_order');
+      if (data) setDbProducts(data as DbProduct[]);
+    };
+    loadProducts();
+  }, []);
 
-      if (initialData && initialData.value !== null) {
-        const isEnabled = typeof initialData.value === 'object' ? !!initialData.value.testMode : (initialData.value === true || initialData.value === 'true');
-        setTestMode(isEnabled);
-        console.log('📡 [System] 테스트 모드 동기화 완료:', isEnabled);
-      }
+  useEffect(() => {
+    const fetchCoupon = async () => {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'coupon')
+        .single();
 
-      // 2. 실시간 동기화 채널 구축 (컴퓨터에서 누르면 폰에서도 즉시 반응)
-      const channel = supabase
-        .channel('system-realtime-sync')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'site_settings', filter: `key=eq.testMode` },
-          (payload) => {
-            const newValue = payload.new ? payload.new.value : null;
-            if (newValue !== null) {
-              const isEnabled = typeof newValue === 'object' ? !!newValue.testMode : (newValue === true || newValue === 'true');
-              setTestMode(isEnabled);
-              console.log('🔄 [Realtime] 시스템 설정 업데이트 감지:', isEnabled);
-              if (isEnabled) toast.success('시스템 테스트 모드가 활성화되었습니다.');
-              else toast.info('시스템이 일반 상담 모드로 전환되었습니다.');
-            }
-          }
-        )
-        .subscribe();
+      if (data && data.value) {
+        setCouponData(data.value as CouponData);
+      }
+    };
 
-      return channel;
-    };
+    fetchCoupon();
 
-    const cleanupChannel = fetchAndSubscribeSystem();
+    const channel = supabase
+      .channel('coupon-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'site_settings',
+          filter: `key=eq.coupon`,
+        },
+        (payload) => {
+          if (payload.new && payload.new.value) {
+            setCouponData(payload.new.value as CouponData);
+          }
+        }
+      )
+      .subscribe();
 
-    return () => { cleanupChannel.then(c => c && supabase.removeChannel(c)); };
-  }, []);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // ✨ testMode 실시간 구독 (새로 추가!)
   useEffect(() => {
@@ -998,7 +998,6 @@ export default function HowlChat() {
           onClose={() => setShowPremiumReport(false)}
         />
       )}
-
 {/* ⚙️ [관리자 버튼] 채팅 페이지 우측 상단 고정 */}
       <button
         onClick={() => navigate('/admin')}
