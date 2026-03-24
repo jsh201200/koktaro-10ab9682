@@ -76,9 +76,10 @@ function FlipCard({ menu, onSelect }: { menu: MenuWithPrice; onSelect: (m: MenuW
             {formatElla(menu.price)}
           </span>
           
-          <p className="text-[10px] mb-3 px-2 leading-tight text-slate-100">
-            {menu.detailDesc || "상세 설명이 준비 중입니다."}
-          </p>
+          {/* ✨ 수정 후: DB에 없으면 menus.ts의 기본값을 가져옵니다 */}
+<p className="text-[10px] mb-3 px-2 leading-tight text-slate-100">
+  {menu.detailDesc || menu.desc} 
+</p>
           
           <button
             onClick={(e) => {
