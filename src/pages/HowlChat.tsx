@@ -729,19 +729,25 @@ const LUCKY_NUMBERS = [7, 3, 9, 5, 2, 8, 1, 6, 4, 11, 13, 17, 21, 27, 33, 34, 12
     setView('chat');
   };
 
-  // ✨ counselorId도 받아서 session에 저장
+  // ✨ 상담 시작 및 이어하기 처리 (얼굴 안 나오는 오류 수정 완료!)
   const handleStartChat = (menuId?: number, counselorId?: string) => {
     if (!userProfile && !localStorage.getItem('howl_profile_id')) {
       setView('auth');
     } else {
       setView('chat');
+      
+      // ✨ 핵심: 이어하기 시에도 상담사 정보를 즉시 세팅합니다.
+      if (counselorId) {
+        updateSession({ counselorId });
+      }
+
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
         if (menu) {
-          // counselorId를 session에 먼저 저장
-          if (counselorId) {
-            updateSession({ counselorId });
-          }
+          // 상담사 ID가 없으면 메뉴에서 찾아서 넣어줍니다.
+          const finalCounselorId = counselorId || getCounselorForMenu(menu.id).id;
+          updateSession({ counselorId: finalCounselorId });
+          
           setTimeout(() => handleMenuSelect(menu), 500);
         }
       }
