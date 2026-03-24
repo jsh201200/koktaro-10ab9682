@@ -1,3 +1,4 @@
+하울채팅최신버전
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import ChatHeader from '@/components/ChatHeader';
@@ -80,7 +81,6 @@ export default function HowlChat() {
     couponDiscount: 0,
     couponActive: false,
   });
-  const [testMode, setTestMode] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -181,47 +181,6 @@ export default function HowlChat() {
     };
   }, []);
 
-  // ✨ testMode 실시간 구독 (새로 추가!)
-  useEffect(() => {
-    const fetchTestMode = async () => {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'testMode')
-        .single();
-
-      if (data && data.value !== null) {
-        setTestMode(data.value.testMode === true || data.value === true);
-      }
-    };
-
-    fetchTestMode();
-
-    const channel = supabase
-      .channel('test-mode-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'site_settings',
-          filter: `key=eq.testMode`,
-        },
-        (payload) => {
-          console.log('🔄 testMode 업데이트:', payload);
-          if (payload.new && payload.new.value !== null) {
-            setTestMode(payload.new.value.testMode === true || payload.new.value === true);
-            console.log('✅ testMode 동기화됨:', payload.new.value.testMode);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
   useEffect(() => {
     const profileId = localStorage.getItem('howl_profile_id');
     if (profileId) {
@@ -310,7 +269,7 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid, addSystemMessage]);
 
-  // ✨ 결제 승인 실시간 구독
+  // ✨ 결제 승인 실시간 구독 (완벽하게 수정됨!)
   useEffect(() => {
     if (!session.dbSessionId) {
       console.warn('⚠️ dbSessionId 없음, 구독 스킵');
@@ -369,11 +328,11 @@ export default function HowlChat() {
     };
   }, [session.dbSessionId, dbProducts, addSystemMessage, addBotMessage, updateSession, setSessionTime, setShowReview]);
 
-  // ✨ activatePaidMode 함수
+  // ✨ activatePaidMode 함수 (메뉴ID별로 다르게 처리)
   const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
     console.log('🎯 activatePaidMode 호출:', { menuId, menuName, price, durationMin });
 
-    // 1,000원 상품 (menuId === 0)
+    // ✨ 1,000원 상품 (menuId === 0) - 스낵 포맷
     if (menuId === 0) {
       updateSession({
         isPaid: true,
@@ -404,7 +363,7 @@ export default function HowlChat() {
       return;
     }
 
-    // 일반 상담
+    // ✨ 일반 상담 (3,900원~59,000원)
     updateSession({
       isPaid: true,
       sessionExpiry: Date.now() + durationMin * 60 * 1000,
@@ -597,7 +556,7 @@ export default function HowlChat() {
 
     // 1,000원 상품
     if (menu.id === 0) {
-      if (testMode) {
+      if (loadSettings().testMode) {
         activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
         addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
         return;
@@ -613,7 +572,7 @@ export default function HowlChat() {
     }
 
     // 일반 상담
-    if (testMode) {
+    if (loadSettings().testMode) {
       activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
       addSystemMessage('🧪 테스트 모드: 결제 없이 상담 시작');
       setTimeout(() => {
@@ -663,7 +622,7 @@ export default function HowlChat() {
     toast.info("상담을 종료했습니다 ✨");
   };
 
-  // ✨ 결제 요청 처리
+  // ✨ 결제 요청 처리 (완벽하게 수정됨!)
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string) => {
     const menu = session.selectedMenu!;
     setShowPayment(false);
