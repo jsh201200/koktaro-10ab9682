@@ -124,13 +124,27 @@ useEffect(() => {
       .eq('id', storedSessionId)
       .single();
 
-    if (sessionData) {
-      console.log('🔄 [복구] 저장된 세션:', {
-        roomId: sessionData.room_id,
-        counselorId: sessionData.counselor_id,
-        selectedMenuId: sessionData.selected_menu_id,
-      });
+      // 🔧 [Fix 3] 메뉴 복구를 먼저 수행 (dbProducts 로딩 전에도 MENUS에서 기본값 사용)
+  let restoredMenu: Menu | null = null;
+  if (sessionData.selected_menu_id !== null && sessionData.selected_menu_id !== undefined) {
+    const menu = MENUS.find(m => m.id === sessionData.selected_menu_id);
+    if (menu) {
+      const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
+      restoredMenu = dbProduct 
+        ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
+        : menu;  // 🔧 dbProducts 비어있어도 MENUS 기본값 사용
+    }
+  }
 
+  updateSession({
+    dbSessionId: sessionData.id,
+    userName: sessionData.user_nickname || '',
+    isPaid: sessionData.is_paid || false,
+    roomId: sessionData.room_id || undefined,
+    counselorId: sessionData.counselor_id || undefined,  // 🔧 [Fix 1+3] 상담사 ID 완벽 복구
+    ...(restoredMenu ? { selectedMenu: restoredMenu } : {}),  // 🔧 [Fix 3] 메뉴도 한번에 복구
+  });
+}
       updateSession({
         dbSessionId: sessionData.id,
         userName: sessionData.user_nickname || '',
@@ -365,10 +379,20 @@ const activatePaidMode = useCallback((durationMin: number, menuId: number, menuN
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
   }, []);
-  const getDbPrice = (menuId: number): number => {
-    const product = dbProducts.find(p => p.menu_id === menuId);
-    return product?.price || 0;
-  };
+ const getDbPrice = (menuId: number): number => {
+  const product = dbProducts.find(p => p.menu_id === menuId);
+  if (product?.price) return product.price;
+  
+  // 🔧 [Fix 2] DB 로딩 실패 시 MENUS 기본 가격으로 폴백
+  const fallbackMenu = MENUS.find(m => m.id === menuId);
+  if (fallbackMenu?.price) {
+    console.warn(`⚠️ [getDbPrice] DB 가격 없음, MENUS 기본값 사용: menuId=${menuId}, price=${fallbackMenu.price}`);
+    return fallbackMenu.price;
+  }
+  
+  console.error(`❌ [getDbPrice] menuId=${menuId}에 대한 가격 정보가 어디에도 없습니다!`);
+  return 0;
+};
 
 const handleBotResponse = useCallback(async (
   userInput: string,
@@ -1017,3 +1041,6 @@ setView('landing');
     </div>
   );
 }
+
+
+
