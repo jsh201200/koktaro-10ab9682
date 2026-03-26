@@ -74,7 +74,7 @@ export async function getGeminiResponse(
   counselorId?: string,
   menuPrice?: number,
 ): Promise<string> {
-  // ✨ [핵심 수정] counselorId 매핑을 견고하게 처리합니다
+  // ✨ [핵심 수정 #1] counselorId 매핑을 견고하게 처리합니다
   // 1. 빈 값 체크
   if (!counselorId || counselorId.trim() === '') {
     console.warn('⚠️ [경고] counselorId가 비어있습니다. 기본값(luna)을 사용합니다.');
@@ -94,13 +94,13 @@ export async function getGeminiResponse(
   if (!validCounselors.includes(normalizedId)) {
     console.warn(`⚠️ [경고] 상담사 ID '${normalizedId}'가 존재하지 않습니다. 사용 가능한 ID: ${validCounselors.join(', ')}`);
     console.warn(`📍 원본 입력값: '${counselorId}'`);
-    // 폴백: luna가 기본값 (이전의 잘못된 기본값 제거!)
+    // 폴백: luna가 기본값
     normalizedId = 'luna';
   }
 
   const basePrompt = COUNSELOR_PROMPTS[normalizedId];
   
-  console.log('✅ [선택됨] 상담사:', {
+  console.log('✅ [상담사 선택됨]', {
     원본입력: counselorId,
     정규화됨: normalizedId,
     사용프롬프트: basePrompt.substring(0, 50) + '...',
@@ -156,7 +156,6 @@ ${basePrompt}
     { role: 'user' as const, content: userInput },
   ];
 
-  // 나머지 코드는 동일합니다...
   try {
     const resp = await fetch(CHAT_URL, {
       method: "POST",
@@ -195,10 +194,9 @@ ${basePrompt}
     return stripMarkdown(result) || "기운이 잠시 흔들렸어... 다시 한번 물어봐줄래? ✨";
   } catch (error) {
     console.error("Chat API error:", error);
-    return "천상계와의 연결이 잠시 끊겼어... 조금 후에 다시 시도해줘! 🌟";
+    return "천상계와의 연결이 잠시 끊겼어... 조금 후에 다시 시도해줄래! 🌟";
   }
 }
-
 
 function stripMarkdown(text: string): string {
   return text
