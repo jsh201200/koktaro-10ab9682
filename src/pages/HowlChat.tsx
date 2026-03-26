@@ -501,8 +501,7 @@ export default function HowlChat() {
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
-    const recommendedCounselor = recommendations[currentCounselor?getCounselorForMenu(session.selectedMenu.id).id : null];
-
+ const recommendedCounselor = recommendations[currentCounselor?.id |luna| ''];
     addBotMessage(
       `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네.\n\n` +
       `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
@@ -798,7 +797,7 @@ export default function HowlChat() {
   const handlePremiumSubmit = async (questions: string[], depositor: string, phoneTail: string) => {
     setShowPremiumForm(false);
     const dbProduct = dbProducts.find(p => p.menu_id === 16);
-    const price = dbProduct?.price || 59000;
+    const price = dbProduct?.price || 79000;
     const menu = { id: 16, name: dbProduct?.name || '종합운명분석', price } as Menu;
     updateSession({ selectedMenu: menu, paymentPending: true });
 
