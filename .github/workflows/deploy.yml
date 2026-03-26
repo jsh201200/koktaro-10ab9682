@@ -5,19 +5,23 @@ on:
     branches:
       - main
 
+# 2026년 최신 노드 버전 강제 설정
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 최신 v4 버전으로 변경 (Node 24 대응)
+      # 1. 최신 v4 버전 사용
       - uses: actions/checkout@v4
 
-      # 2. Supabase CLI 최신 설정
+      # 2. Supabase CLI 설치
       - uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      # 3. 배포 실행 (에러 방지를 위해 토큰/ID 확인)
+      # 3. 배포 실행
       - name: Deploy howl-chat
         run: supabase functions deploy howl-chat --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
