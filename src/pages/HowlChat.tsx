@@ -846,7 +846,7 @@ export default function HowlChat() {
     if (!userProfile && !localStorage.getItem('howl_profile_id')) {
       setView('auth');
     } else {
-      setView('chat');
+      setView('landing');
       if (menuId !== undefined) {
         const menu = MENUS.find(m => m.id === menuId);
         if (menu) {
