@@ -17,6 +17,7 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
+          
       # 3. 배포 실행 (열쇠가 맞다면 여기서 성공!)
       - name: Deploy howl-chat
         run: supabase functions deploy howl-chat --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
