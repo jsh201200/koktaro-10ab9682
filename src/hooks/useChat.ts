@@ -60,7 +60,7 @@ export function useChat() {
       if (existingId) {
         const { data } = await supabase.from('chat_sessions').select('*').eq('id', existingId).single();
         if (data) {
-          // ✨ [Fix 1+3] counselorId, roomId, selectedMenuId 모두 복구
+          // ✨ [Fix 1] counselorId, roomId, selectedMenuId 모두 복구
           setSession(prev => ({
             ...prev,
             dbSessionId: data.id,
@@ -114,11 +114,12 @@ export function useChat() {
   useEffect(() => {
     const fetchRoomMessages = async () => {
       if (!session.dbSessionId || !session.roomId) {
+        // ✨ [핵심] roomId가 없으면 화면을 즉시 비움 (이안의 잔상 제거)
         setMessages([]);
         return;
       }
 
-      // ✨ 방을 옮기는 즉시 화면을 비워야 이안 선생님의 잔상이 남지 않습니다.
+      // ✨ [핵심] 방을 옮기는 즉시 화면을 비워야 이전 상담사 대화가 남지 않음
       setMessages([]);
 
       const { data: history } = await supabase
@@ -146,7 +147,10 @@ export function useChat() {
 
   // 3️⃣ [핵심 수정] 메시지 저장 시 현재 roomId를 '확실하게' 낚아채서 저장
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
-    if (!session.dbSessionId || !session.roomId) return; // roomId가 없으면 저장 안 함
+    if (!session.dbSessionId || !session.roomId) {
+      console.warn('⚠️ roomId 없어서 메시지 저장 안 함', { sessionId: session.dbSessionId, roomId: session.roomId });
+      return;
+    }
     
     await supabase.from('messages').insert({
       session_id: session.dbSessionId,
@@ -158,7 +162,14 @@ export function useChat() {
   }, [session.dbSessionId, session.roomId]); // session.roomId를 감시해서 최신화!
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, image?: string) => {
-    const msg: ChatMessage = { id: genId(), role, content, timestamp: Date.now(), image, isNew: role === 'bot' };
+    const msg: ChatMessage = { 
+      id: genId(), 
+      role, 
+      content, 
+      timestamp: Date.now(), 
+      image, 
+      isNew: role === 'bot' 
+    };
     setMessages(prev => {
       const updated = prev.map(m => m.isNew ? { ...m, isNew: false } : m);
       return [...updated, msg];
@@ -190,7 +201,7 @@ export function useChat() {
       
       // ✨ [핵심 수정] 세션 업데이트 시 DB에도 즉시 동기화합니다.
       if (next.dbSessionId) {
-        const updatePayload: any = {};
+        const updatePayload: Record<string, any> = {};
         
         if (updates.userName !== undefined) {
           updatePayload.user_nickname = next.userName || null;
@@ -230,7 +241,7 @@ export function useChat() {
               if (error) {
                 console.error('❌ [DB 업데이트 실패]', error);
               } else {
-                console.log('✅ [DB 업데이트 성공]', data);
+                console.log('✅ [DB 업데이트 성공]');
               }
             });
         }
