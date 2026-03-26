@@ -501,7 +501,7 @@ export default function HowlChat() {
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
-    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
+    const recommendedCounselor = recommendations[currentCounselor?getCounselorForMenu(session.selectedMenu.id).id : null];
 
     addBotMessage(
       `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네.\n\n` +
