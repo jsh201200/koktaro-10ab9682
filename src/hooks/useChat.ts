@@ -52,7 +52,15 @@ export function useChat() {
     return `msg-${Date.now()}-${idCounter.current}`;
   };
 
-  // 1️⃣ [초기 로드] 세션 아이디 확인 및 최초 세션 생성
+  // FIX 1: 세션 초기화 시 counselorId 정규화
+  const normalizeCounselorId = (id: string | null | undefined): string => {
+    if (!id || typeof id !== 'string') return 'luna';
+    const normalized = id.toLowerCase().trim();
+    if (normalized === 'song') return 'songsengsang';
+    const valid = ['ian', 'jihan', 'songsengsang', 'luna', 'suhyun', 'myunghwa'];
+    return valid.includes(normalized) ? normalized : 'luna';
+  };
+
   useEffect(() => {
     const initSession = async () => {
       const existingId = localStorage.getItem('howl_session_id');
@@ -60,26 +68,25 @@ export function useChat() {
       if (existingId) {
         const { data } = await supabase.from('chat_sessions').select('*').eq('id', existingId).single();
         if (data) {
-          // ✨ [Fix 1] counselorId, roomId, selectedMenuId 모두 복구
+          const normalizedCounselorId = normalizeCounselorId(data.counselor_id);
           setSession(prev => ({
             ...prev,
             dbSessionId: data.id,
             userName: data.user_nickname || '',
             isPaid: data.is_paid || false,
             roomId: data.room_id || undefined,
-            counselorId: data.counselor_id || undefined,
+            counselorId: normalizedCounselorId,
             selectedMenu: data.selected_menu_id ? { id: data.selected_menu_id } as Menu : null,
           }));
-          console.log('✅ [세션 복구 완료]', {
+          console.log('세션 복구 완료', {
             sessionId: data.id,
-            counselorId: data.counselor_id,
+            counselorId: normalizedCounselorId,
             roomId: data.room_id,
           });
           return;
         }
       }
       
-      // 새 세션 생성
       const { data: newSession } = await supabase
         .from('chat_sessions')
         .insert({
@@ -92,7 +99,7 @@ export function useChat() {
       if (newSession) {
         localStorage.setItem('howl_session_id', newSession.id);
         setSession(prev => ({ ...prev, dbSessionId: newSession.id }));
-        console.log('✅ [새 세션 생성]', newSession.id);
+        console.log('새 세션 생성', newSession.id);
       }
     };
 
@@ -110,23 +117,21 @@ export function useChat() {
     initSession().then(() => recordVisit());
   }, []);
 
-  // 2️⃣ [핵심 수정] 방(roomId)이 바뀔 때 이전 잔상을 '즉시' 지우고 해당 상담사 대화만 불러오기
+  // FIX 2: roomId 변경 시 메시지 즉시 로드 (다른 상담사 메시지 섞임 방지)
   useEffect(() => {
     const fetchRoomMessages = async () => {
       if (!session.dbSessionId || !session.roomId) {
-        // ✨ [핵심] roomId가 없으면 화면을 즉시 비움 (이안의 잔상 제거)
         setMessages([]);
         return;
       }
 
-      // ✨ [핵심] 방을 옮기는 즉시 화면을 비워야 이전 상담사 대화가 남지 않음
       setMessages([]);
 
       const { data: history } = await supabase
         .from('messages')
         .select('*')
         .eq('session_id', session.dbSessionId)
-        .eq('room_id', session.roomId) // 🎯 현재 상담사의 고유 roomId로만 필터링!
+        .eq('room_id', session.roomId)
         .order('created_at', { ascending: true });
       
       if (history && history.length > 0) {
@@ -138,37 +143,37 @@ export function useChat() {
           image: h.image_url || undefined,
         }));
         setMessages(msgs);
-        console.log(`✅ [${session.roomId}에서 ${msgs.length}개 메시지 로드]`);
+        console.log(`${session.roomId}에서 ${msgs.length}개 메시지 로드`);
       }
     };
 
     fetchRoomMessages();
-  }, [session.roomId, session.dbSessionId]); // roomId가 바뀌면 즉시 실행!
+  }, [session.roomId, session.dbSessionId]);
 
-  // 3️⃣ [핵심 수정] 메시지 저장 시 현재 roomId를 '확실하게' 낚아채서 저장
+  // FIX 3: 메시지 저장 시 roomId 확인
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
     if (!session.dbSessionId || !session.roomId) {
-      console.warn('⚠️ roomId 없어서 메시지 저장 안 함', { sessionId: session.dbSessionId, roomId: session.roomId });
+      console.warn('roomId 없어서 메시지 저장 안 함', { sessionId: session.dbSessionId, roomId: session.roomId });
       return;
     }
     
     await supabase.from('messages').insert({
       session_id: session.dbSessionId,
-      room_id: session.roomId, // ✨ 현재 세션에 찍힌 그 상담사 방으로 저장!
+      room_id: session.roomId,
       role,
       content,
       image_url: imageUrl || null,
     });
-  }, [session.dbSessionId, session.roomId]); // session.roomId를 감시해서 최신화!
+  }, [session.dbSessionId, session.roomId]);
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, image?: string) => {
-    const msg: ChatMessage = { 
-      id: genId(), 
-      role, 
-      content, 
-      timestamp: Date.now(), 
-      image, 
-      isNew: role === 'bot' 
+    const msg: ChatMessage = {
+      id: genId(),
+      role,
+      content,
+      timestamp: Date.now(),
+      image,
+      isNew: role === 'bot'
     };
     setMessages(prev => {
       const updated = prev.map(m => m.isNew ? { ...m, isNew: false } : m);
@@ -195,11 +200,11 @@ export function useChat() {
     return msg;
   }, [addMessage, saveChatMessage]);
 
+  // FIX 4: DB 동기화 시 counselorId 정규화
   const updateSession = useCallback((updates: Partial<SessionState>) => {
     setSession(prev => {
       const next = { ...prev, ...updates };
       
-      // ✨ [핵심 수정] 세션 업데이트 시 DB에도 즉시 동기화합니다.
       if (next.dbSessionId) {
         const updatePayload: Record<string, any> = {};
         
@@ -215,20 +220,18 @@ export function useChat() {
           updatePayload.selected_menu_id = next.selectedMenu?.id ?? null;
         }
         
-        // 🚪 [필수] 방 번호 업데이트
         if (updates.roomId !== undefined) {
           updatePayload.room_id = next.roomId || null;
-          console.log('💾 [DB 저장] roomId:', next.roomId);
         }
         
-        // 👤 [필수] 상담사 ID 업데이트
         if (updates.counselorId !== undefined) {
-          updatePayload.counselor_id = next.counselorId || null;
-          console.log('💾 [DB 저장] counselorId:', next.counselorId);
+          const normalizedId = normalizeCounselorId(updates.counselorId);
+          updatePayload.counselor_id = normalizedId;
+          console.log('DB 저장 - counselorId:', normalizedId);
         }
         
         if (Object.keys(updatePayload).length > 0) {
-          console.log('🔄 [DB 동기화]', {
+          console.log('DB 동기화', {
             sessionId: next.dbSessionId,
             payload: updatePayload,
           });
@@ -237,11 +240,11 @@ export function useChat() {
             .from('chat_sessions')
             .update(updatePayload)
             .eq('id', next.dbSessionId)
-            .then(({ data, error }) => {
+            .then(({ error }) => {
               if (error) {
-                console.error('❌ [DB 업데이트 실패]', error);
+                console.error('DB 업데이트 실패', error);
               } else {
-                console.log('✅ [DB 업데이트 성공]');
+                console.log('DB 업데이트 성공');
               }
             });
         }
