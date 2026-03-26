@@ -502,12 +502,12 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
-  const handleCrossSelling = useCallback(() => {
-    const currentCounselor = session.selectedMenu
-      ? getCounselorForMenu(session.selectedMenu.id)
-      : null;
+ const handleCrossSelling = useCallback(() => {
+    // 1. 현재 상담사 ID를 안전하게 가져오기 (없으면 이안을 기본값으로 하되 변수에 담기)
+    const currentId = session?.counselorId || 
+                      (session?.selectedMenu ? getCounselorForMenu(session.selectedMenu.id).id : 'ian');
 
-    const recommendations: { [key: string]: { name: string; specialty: string } } = {
+    const recommendations: Record<string, { name: string; specialty: string }> = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
       'songsengsang': { name: '루나', specialty: '타로' },
@@ -516,12 +516,22 @@ export default function HowlChat() {
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
-    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
+    // 2. 판별된 currentId를 사용해 추천 상담사 확정
+    const recommended = recommendations[currentId];
 
-    addBotMessage(
-      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
-      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
-    );
+    // 3. 안전하게 메시지 발송
+    if (recommended) {
+      addBotMessage(
+        `음... 보니까 ${recommended.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
+        `'${recommended.name}'이(가) 전문가야. 한번 만나볼래?`
+      );
+    }
+
+    // 4. 메뉴 그리드 자동 열기
+    setTimeout(() => {
+      setIsMenuOpen(true);
+    }, 2000);
+  }, [session, addBotMessage, setIsMenuOpen]); // 의존성 배열 확인!
 
     setTimeout(() => {
       setIsMenuOpen(true);
