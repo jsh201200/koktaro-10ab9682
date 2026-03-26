@@ -502,23 +502,26 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
- const handleCrossSelling = useCallback(() => {
-  // 1. 현재 세션에 저장된 상담사 ID를 최우선으로 가져옵니다.
-  const currentId = session.counselorId || (session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id).id : 'ian');
+  const handleCrossSelling = useCallback(() => {
+    const currentCounselor = session.selectedMenu
+      ? getCounselorForMenu(session.selectedMenu.id)
+      : null;
 
-  const recommendations = {
-    'ian': { name: '지한', specialty: '연애운' },
-    'jihan': { name: '송선생', specialty: '길방' },
-    // ... 나머지 목록
-  };
+    const recommendations: { [key: string]: { name: string; specialty: string } } = {
+      'ian': { name: '지한', specialty: '연애운' },
+      'jihan': { name: '송선생', specialty: '길방' },
+      'songsengsang': { name: '루나', specialty: '타로' },
+      'luna': { name: '수현', specialty: '심리상담' },
+      'suhyun': { name: '명화', specialty: '실질 해결책' },
+      'myunghwa': { name: '이안', specialty: '투자/재물운' },
+    };
 
-  const recommended = recommendations[currentId];
+    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
 
-  addBotMessage(
-    `음... 보니까 ${recommended.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
-    `'${recommended.name}'이(가) 전문가야. 한번 만나볼래?`
-  );
-}, [session.counselorId, session.selectedMenu, addBotMessage]);
+    addBotMessage(
+      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
+      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
+    );
 
     setTimeout(() => {
       setIsMenuOpen(true);
