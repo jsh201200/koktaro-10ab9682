@@ -5,16 +5,28 @@ on:
     branches:
       - main
 
+# 1. 깃허브가 공지한 대로 Node 24 사용을 강제합니다.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # 2. 최신 버전(v4)으로 체크아웃
       - uses: actions/checkout@v4
 
-      # 2026년 환경에 맞춰 CLI 설치 방식 변경
+      # 3. Node.js 24 환경 설정 (공지사항 핵심 대응)
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # 4. Supabase CLI 설치
       - name: Install Supabase CLI
         run: npm install -g supabase
 
+      # 5. 배포 실행 (열쇠는 금고에서 꺼내오기!)
       - name: Deploy howl-chat
         run: supabase functions deploy howl-chat --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
