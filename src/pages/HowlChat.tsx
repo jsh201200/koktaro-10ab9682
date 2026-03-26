@@ -839,7 +839,7 @@ export default function HowlChat() {
       supabase.from('chat_sessions').update({ profile_id: profile.id, user_nickname: profile.nickname }).eq('id', session.dbSessionId);
     }
 
-    setView('chat');
+    setView('landing');
   };
 
   const handleStartChat = (menuId?: number) => {
