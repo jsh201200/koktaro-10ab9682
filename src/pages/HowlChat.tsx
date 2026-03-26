@@ -502,8 +502,7 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
- const handleCrossSelling = useCallback(() => {
-    // 1. 현재 상담사 ID를 안전하게 가져오기 (없으면 이안을 기본값으로 하되 변수에 담기)
+const handleCrossSelling = useCallback(() => {
     const currentId = session?.counselorId || 
                       (session?.selectedMenu ? getCounselorForMenu(session.selectedMenu.id).id : 'ian');
 
@@ -516,10 +515,8 @@ export default function HowlChat() {
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
-    // 2. 판별된 currentId를 사용해 추천 상담사 확정
     const recommended = recommendations[currentId];
 
-    // 3. 안전하게 메시지 발송
     if (recommended) {
       addBotMessage(
         `음... 보니까 ${recommended.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
@@ -527,11 +524,10 @@ export default function HowlChat() {
       );
     }
 
-    // 4. 메뉴 그리드 자동 열기
     setTimeout(() => {
       setIsMenuOpen(true);
     }, 2000);
-  }, [session, addBotMessage, setIsMenuOpen]); // 의존성 배열 확인!
+  }, [session, addBotMessage, setIsMenuOpen]); // 👈 이 부분 괄호와 쉼표를 정확히 맞춰줘!
 
     setTimeout(() => {
       setIsMenuOpen(true);
