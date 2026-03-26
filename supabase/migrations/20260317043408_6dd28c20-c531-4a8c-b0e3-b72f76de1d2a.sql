@@ -1,6 +1,6 @@
 
 -- ============================================
--- STEP 1: Core Database Tables for 하울의 챗봇상담소
+-- STEP 1: Core Database Tables for 콕콕의 챗봇상담소
 -- ============================================
 
 -- 1. Products table (메뉴/상품)
