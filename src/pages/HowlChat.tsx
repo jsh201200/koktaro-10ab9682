@@ -502,11 +502,12 @@ export default function HowlChat() {
     }
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
-const handleCrossSelling = useCallback(() => {
-    const currentId = session?.counselorId || 
-                      (session?.selectedMenu ? getCounselorForMenu(session.selectedMenu.id).id : 'ian');
+  const handleCrossSelling = useCallback(() => {
+    const currentCounselor = session.selectedMenu
+      ? getCounselorForMenu(session.selectedMenu.id)
+      : null;
 
-    const recommendations: Record<string, { name: string; specialty: string }> = {
+    const recommendations: { [key: string]: { name: string; specialty: string } } = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
       'songsengsang': { name: '루나', specialty: '타로' },
@@ -515,19 +516,12 @@ const handleCrossSelling = useCallback(() => {
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
-    const recommended = recommendations[currentId];
+    const recommendedCounselor = recommendations[currentCounselor?.id || 'ian'];
 
-    if (recommended) {
-      addBotMessage(
-        `음... 보니까 ${recommended.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
-        `'${recommended.name}'이(가) 전문가야. 한번 만나볼래?`
-      );
-    }
-
-    setTimeout(() => {
-      setIsMenuOpen(true);
-    }, 2000);
-  }, [session, addBotMessage, setIsMenuOpen]); // 👈 이 부분 괄호와 쉼표를 정확히 맞춰줘!
+    addBotMessage(
+      `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네. 💫\n\n` +
+      `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
+    );
 
     setTimeout(() => {
       setIsMenuOpen(true);
