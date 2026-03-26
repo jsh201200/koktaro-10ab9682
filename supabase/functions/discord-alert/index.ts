@@ -58,7 +58,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         embeds: [{
-          title: `[하울 상담소] ${Number(price).toLocaleString()}원 ${methodLabel}! ✨`,
+          title: `[콕콕 상담소] ${Number(price).toLocaleString()}원 ${methodLabel}! ✨`,
           color: 0xE2D1F9,
           fields,
           footer: { text: "관리자 대시보드에서 승인해주세요." },
