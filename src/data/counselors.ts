@@ -16,7 +16,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'ian',
     name: '이안',
-    title: '냉철한 투자 전문가',
+    title: '투자 공학을 접목한 데이터 역술 마스터',
     age: '30대',
     gender: '남',
     specialty: '재물/진로',
@@ -27,7 +27,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'jihan',
     name: '지한',
-    title: '잔망스러운 남사친',
+    title: '트렌드를 읽는 천재 역술가이자 다정한 남사친',
     age: '20대',
     gender: '남',
     specialty: '연애/MBTI',
@@ -38,7 +38,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'song',
     name: '송선생',
-    title: '품격 있는 인생 멘토',
+    title: '정통 명리학과 풍수학의 대부',
     age: '50대',
     gender: '남',
     specialty: '사주/정통',
@@ -49,7 +49,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'luna',
     name: '루나',
-    title: '몽환적인 요정',
+    title: '타로와 색채를 다루는 직관 역술 마스터',
     age: '20대',
     gender: '여',
     specialty: '타로/신비',
@@ -60,7 +60,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'suhyun',
     name: '수현',
-    title: '공감형 힐러',
+    title: '심리학과 역학을 결합한 힐링 역술 마스터',
     age: '30대',
     gender: '여',
     specialty: '심리/위로',
@@ -71,7 +71,7 @@ export const COUNSELORS: Counselor[] = [
   {
     id: 'myunghwa',
     name: '명화',
-    title: '팩트 폭격 해결사',
+    title: '관상과 개운법 해결사',
     age: '50대',
     gender: '여',
     specialty: '관상/카리스마',
@@ -82,5 +82,10 @@ export const COUNSELORS: Counselor[] = [
 ];
 
 export function getCounselorForMenu(menuId: number): Counselor {
-  return COUNSELORS.find(c => c.menuIds.includes(menuId)) || COUNSELORS[3];
+  const candidates = COUNSELORS.filter((c) => c.menuIds.includes(menuId));
+  if (candidates.length === 0) {
+    return COUNSELORS[3];
+  }
+  // 모든 상담사가 동일 메뉴를 제공할 때도 메뉴별 기본 상담사가 고정되도록 분산합니다.
+  return candidates[Math.abs(menuId) % candidates.length];
 }
