@@ -373,7 +373,7 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid, view, addSystemMessage]);
 
- useEffect(() => {
+useEffect(() => {
   if (!session.dbSessionId) {
     console.warn('dbSessionId 없음');
     return;
@@ -386,27 +386,40 @@ export default function HowlChat() {
 
   const channel = supabase
     .channel(`payment-approval-${session.dbSessionId}`)
-    .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'payments',
-      filter: `session_id=eq.${session.dbSessionId}`,
-    }, (payload) => {
-      console.log('결제 승인 감지됨', payload);
-      const updated = payload.new as any;
-      if (updated.status === 'approved') {
-        console.log('승인됨! activatePaidMode 실행');
-        const product = dbProducts.find(p => p.menu_id === updated.menu_id);
-        const durationMin = product?.duration_minutes || 30;
-        activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'payments',
+        filter: `session_id=eq.${session.dbSessionId}`,
+      },
+      (payload) => {
+        console.log('결제 데이터 업데이트 감지:', payload);
+        const updatedPayment = payload.new as any;
+
+        if (updatedPayment.status === 'approved' && updatedPayment.payment_key) {
+          const product = dbProducts.find((p) => p.menu_id === updatedPayment.menu_id);
+          if (product) {
+            activatePaidMode(
+              product.duration_minutes,
+              product.menu_id,
+              product.name,
+              product.price
+            );
+            toast.success(`${product.name} 결제가 확인되었습니다!`);
+          }
+        }
       }
-    })
+    )
     .subscribe((status) => {
       console.log('구독 상태:', status);
     });
 
-  return () => { supabase.removeChannel(channel); };
-}, [session.dbSessionId, session.userName, dbProducts]);
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session.dbSessionId, dbProducts, activatePaidMode]);
 
 // ✨ activatePaidMode - useCallback으로 감싸서 최신 상태 참조
   const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
@@ -513,72 +526,57 @@ export default function HowlChat() {
     );
   }, [activatePaidMode, dbProducts, normalizeCounselorId, session.counselorId, session.dbSessionId, session.roomId, session.selectedMenu, session.userName, updateSession, userProfile]);
 
-  useEffect(() => {
-    if (!session.dbSessionId || session.isPaid) return;
+useEffect(() => {
+  if (!session.dbSessionId) return;
 
-    console.log('결제 승인 Realtime 구독 시작', session.dbSessionId);
-
-    const channel = supabase
-      .channel(`payment-approval-${session.dbSessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'payments',
-          filter: `session_id=eq.${session.dbSessionId}`,
-        },
-        (payload) => {
-          const updated = payload.new as any;
-          console.log('결제 승인 UPDATE 감지', updated);
-          if (updated?.status === 'approved') {
-            void syncApprovedPayment(updated, 'realtime');
-          }
+  const channel = supabase
+    .channel(`payment-status-${session.dbSessionId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'payments',
+        filter: `session_id=eq.${session.dbSessionId}`,
+      },
+      (payload) => {
+        const updated = payload.new as any;
+        if (updated.status === 'approved') {
+          syncApprovedPayment();
         }
-      )
-      .subscribe((status) => {
-        console.log('결제 승인 구독 상태:', status);
-      });
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session.dbSessionId, session.isPaid, syncApprovedPayment]);
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session.dbSessionId, syncApprovedPayment]);
 
   useEffect(() => {
     if (!session.dbSessionId || session.isPaid) return;
 
-    let cancelled = false;
+ useEffect(() => {
+  if (!session.dbSessionId) return;
 
-    const checkLatestPayment = async () => {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('session_id', session.dbSessionId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  let cancelled = false;
+  const checkLatestPayment = async () => {
+    if (cancelled) return;
+    try {
+      await syncApprovedPayment();
+    } catch (err) {
+      console.error('Polling check error:', err);
+    }
+  };
 
-      if (cancelled || error || !data) {
-        if (error) console.error('결제 상태 polling 실패', error);
-        return;
-      }
+  const timer = setInterval(checkLatestPayment, 5000);
+  checkLatestPayment();
 
-      if (data.status === 'approved') {
-        await syncApprovedPayment(data, 'polling');
-      }
-    };
-
-    void checkLatestPayment();
-    const intervalId = window.setInterval(() => {
-      void checkLatestPayment();
-    }, 3000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [session.dbSessionId, session.isPaid, syncApprovedPayment]);
+  return () => {
+    cancelled = true;
+    clearInterval(timer);
+  };
+}, [session.dbSessionId, syncApprovedPayment]);
 
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
