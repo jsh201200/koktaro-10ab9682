@@ -393,7 +393,8 @@ export default function HowlChat() {
     return () => { supabase.removeChannel(channel); };
   }, [session.dbSessionId, session.userName, dbProducts]);
 
-  const activatePaidMode = (durationMin: number, menuId: number, menuName: string, price: number) => {
+  // ✨ activatePaidMode - useCallback으로 감싸서 최신 상태 참조
+  const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
     if (menuId === 0) {
       updateSession({
         isPaid: true,
@@ -467,7 +468,7 @@ export default function HowlChat() {
       const name = session.userName || userProfile?.nickname || '';
       addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게. 궁금한 것을 말씀해주세요!`);
     }, 800);
-  };
+  }, [addBotMessage, addSystemMessage, session.userName, userProfile, updateSession, setTimerExpired]);
 
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
@@ -730,6 +731,29 @@ export default function HowlChat() {
       }, 800);
       return;
     }
+
+    // ✨ 결제창 띄우기 전에 상담사가 먼저 인사
+    setTimeout(() => {
+      const hour = new Date().getHours();
+      let timeGreeting = '';
+      if (hour >= 5 && hour < 9) timeGreeting = '새벽부터 고민이 깊으신가 봐요';
+      else if (hour >= 9 && hour < 12) timeGreeting = '오전이 반짝반짝한 시간이네요';
+      else if (hour >= 12 && hour < 18) timeGreeting = '오후의 햇살이 운명을 밝혀줄 거예요';
+      else if (hour >= 18 && hour < 22) timeGreeting = '저녁 별들이 당신의 이야기를 듣고 싶어해요';
+      else timeGreeting = '밤은 진실이 드러나는 시간이에요';
+
+      const name = session.userName || userProfile?.nickname || '';
+      const counselorTones: Record<string, string> = {
+        'ian': `${name}님 ${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼\n\n결제 후 바로 심층 리딩을 시작할게요!`,
+        'jihan': `${name}! ${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎\n\n결제하면 바로 시작해줄게!`,
+        'song': `${name}님, ${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨\n\n결제 확인 후 바로 상담을 시작하겠습니다.`,
+        'luna': `${name}님 ${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙\n\n결제 후 바로 리딩을 시작할게요!`,
+        'suhyun': `${name}님 ${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂\n\n결제 확인되면 바로 시작할게요!`,
+        'myunghwa': `${name}! ${timeGreeting}. 자, 솔직하게 봐보자! 🔥\n\n결제하면 바로 시작해줄게!`,
+      };
+      const greeting = counselorTones[counselor.id] || `${name}님, 안녕하세요! ${actualMenu.name} 상담을 시작할게요. 결제 후 바로 이어집니다! ✨`;
+      addBotMessage(greeting);
+    }, 300);
 
     setShowPayment(true);
   };
@@ -1204,7 +1228,7 @@ export default function HowlChat() {
             />
           ))}
         </AnimatePresence>
-        {isTyping && <TypingIndicator />}
+        {isTyping && <TypingIndicator counselorImage={currentCounselor?.image} />}
         <div ref={chatEndRef} />
       </main>
 
