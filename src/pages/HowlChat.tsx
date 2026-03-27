@@ -27,6 +27,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const TYPING_DELAY_MS = 2000;
+const COUNSELOR_ID_ALIASES: Record<string, string> = {
+  songsengsang: 'song',
+};
 
 interface UserProfile {
   id: string;
@@ -81,6 +84,7 @@ export default function HowlChat() {
     messages, session, isTyping, setIsTyping,
     addBotMessage, addUserMessage, addSystemMessage,
     updateSession, resetSession,
+    setMessages, createNewDbSession,
   } = useChat();
   const { settings } = useSiteSettings();
   const navigate = useNavigate();
@@ -106,6 +110,7 @@ export default function HowlChat() {
   
   const [showTimeSelection, setShowTimeSelection] = useState(false);
   const [selectedMenuForTime, setSelectedMenuForTime] = useState<DbProduct | null>(null);
+  const [preferredCounselorIdForTime, setPreferredCounselorIdForTime] = useState<string | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -196,21 +201,17 @@ export default function HowlChat() {
       const lastAuthId = localStorage.getItem('howl_last_auth_id');
       
       if (!storedSessionId) {
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
-        sessionIdRef.current = newSessionId;
-        resetSession();
+        const newId = await createNewDbSession();
+        sessionIdRef.current = newId || sessionIdRef.current;
         return;
       }
 
       if (lastAuthId && storedProfileId && lastAuthId !== storedProfileId) {
         console.warn('세션 사용자 변경 감지');
-        const newSessionId = `session_${Date.now()}_${Math.random()}`;
-        localStorage.setItem('howl_session_id', newSessionId);
         localStorage.removeItem('howl_profile_id');
         localStorage.removeItem('howl_last_auth_id');
-        sessionIdRef.current = newSessionId;
-        resetSession();
+        const newId = await createNewDbSession();
+        sessionIdRef.current = newId || sessionIdRef.current;
         setUserProfile(null);
         setView('landing');
         toast.info('세션이 초기화되었습니다. 다시 시작해주세요.');
@@ -320,7 +321,7 @@ export default function HowlChat() {
     const counselorTones: { [key: string]: string } = {
       'ian': `${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요.`,
       'jihan': `${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐!`,
-      'songsengsang': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다.`,
+      'song': `${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다.`,
       'luna': `${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요.`,
       'suhyun': `${timeGreeting}... 당신의 마음이 저한테 들려요.`,
       'myunghwa': `${timeGreeting}. 자, 솔직하게 봐보자!`,
@@ -328,6 +329,22 @@ export default function HowlChat() {
 
     return counselorTones[counselorId] || timeGreeting;
   }, []);
+
+  const normalizeCounselorId = useCallback((id?: string | null): string | undefined => {
+    if (!id) return undefined;
+    return COUNSELOR_ID_ALIASES[id] || id;
+  }, []);
+
+  const resolveCurrentCounselor = useCallback(() => {
+    const normalizedSessionCounselorId = normalizeCounselorId(session.counselorId);
+    if (normalizedSessionCounselorId) {
+      return COUNSELORS.find((c) => c.id === normalizedSessionCounselorId) || null;
+    }
+    if (session.selectedMenu) {
+      return getCounselorForMenu(session.selectedMenu.id);
+    }
+    return null;
+  }, [normalizeCounselorId, session.counselorId, session.selectedMenu]);
 
   // FIX 2: 타이머 관리 - view='chat'일 때만 활성화, 방 나가면 초기화
   useEffect(() => {
@@ -488,20 +505,18 @@ export default function HowlChat() {
   }, [messages, addBotMessage, setIsTyping, delayedTyping]);
 
   const handleCrossSelling = useCallback(() => {
-    const currentCounselor = session.selectedMenu
-      ? getCounselorForMenu(session.selectedMenu.id)
-      : null;
+    const currentCounselor = resolveCurrentCounselor();
 
     const recommendations: { [key: string]: { name: string; specialty: string } } = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
-      'songsengsang': { name: '루나', specialty: '타로' },
+      'song': { name: '루나', specialty: '타로' },
       'luna': { name: '수현', specialty: '심리상담' },
       'suhyun': { name: '명화', specialty: '실질 해결책' },
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
 
- const recommendedCounselor = recommendations[currentCounselor?.id |luna| ''];
+    const recommendedCounselor = recommendations[currentCounselor?.id || 'luna'] || recommendations.luna;
     addBotMessage(
       `음... 보니까 ${recommendedCounselor.specialty} 쪽도 복잡하게 얽혀있네.\n\n` +
       `'${recommendedCounselor.name}'이(가) 전문가야. 한번 만나볼래?`
@@ -510,7 +525,7 @@ export default function HowlChat() {
     setTimeout(() => {
       setIsMenuOpen(true);
     }, 2000);
-  }, [session.selectedMenu, addBotMessage, setIsMenuOpen]);
+  }, [addBotMessage, setIsMenuOpen, resolveCurrentCounselor]);
 
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
@@ -543,13 +558,13 @@ export default function HowlChat() {
       }
 
       updateSession({ questionCount: session.questionCount + 1 });
-      const counselor = getCounselorForMenu(session.selectedMenu.id);
+      const counselor = resolveCurrentCounselor();
       await handleBotResponse(
         text,
         session.selectedMenu.name,
         true,
         image,
-        counselor.id,
+        counselor?.id,
         getDbPrice(session.selectedMenu.id)
       );
       return;
@@ -579,7 +594,7 @@ export default function HowlChat() {
       return;
     }
 
-    const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
+    const counselor = resolveCurrentCounselor();
 
     await handleBotResponse(
       text,
@@ -598,7 +613,7 @@ export default function HowlChat() {
     }
   };
 
-  const handleMenuSelect = async (menu: Menu) => {
+  const handleMenuSelect = async (menu: Menu, counselorId?: string) => {
     setIsMenuOpen(false);
 
     const baseName = menu.name.split(' - ')[0].trim();
@@ -611,41 +626,72 @@ export default function HowlChat() {
       const product = dbProducts.find(p => p.menu_id === menu.id);
       if (product) {
         setSelectedMenuForTime(product);
+        const normalizedPreferred = normalizeCounselorId(counselorId);
+        setPreferredCounselorIdForTime(normalizedPreferred || null);
+        updateSession({ counselorId: normalizedPreferred });
         setShowTimeSelection(true);
       }
       return;
     }
 
-    proceedWithMenu(menu);
+    await proceedWithMenu(menu, undefined, undefined, counselorId);
   };
 
-  const handleTimeSelect = (product: DbProduct) => {
+  const handleTimeSelect = async (product: DbProduct) => {
     setShowTimeSelection(false);
     setSelectedMenuForTime(null);
+    const counselorIdForTime =
+      preferredCounselorIdForTime || normalizeCounselorId(session.counselorId) || undefined;
+    setPreferredCounselorIdForTime(null);
 
+    const baseMenu = MENUS.find((m) => m.id === product.menu_id);
+    if (!baseMenu) {
+      toast.error('선택한 메뉴 정보를 찾지 못했어.');
+      return;
+    }
+
+    // Menu 타입(desc/detailDesc 포함)을 완전하게 유지
     const menu: Menu = {
-      id: product.menu_id,
+      ...baseMenu,
       name: product.name,
-      icon: product.icon,
+      icon: product.icon || baseMenu.icon,
       price: product.price,
-      category: 'A' as const,
-      categoryName: 'Menu',
     };
 
-    proceedWithMenu(menu, product.price, product.duration_minutes);
+    await proceedWithMenu(menu, product.price, product.duration_minutes, counselorIdForTime);
   };
 
   // FIX 3: roomId 생성 시 상담사별 고유 방 생성
-  const proceedWithMenu = (menu: Menu, price?: number, duration?: number) => {
-    const counselor = getCounselorForMenu(menu.id);
-    const roomId = `room_${counselor.id}_${session.dbSessionId}_${Date.now()}`;
+  const proceedWithMenu = async (menu: Menu, price?: number, duration?: number, preferredCounselorId?: string) => {
+    const normalizedPreferredCounselorId = normalizeCounselorId(preferredCounselorId);
+    const counselor = normalizedPreferredCounselorId
+      ? COUNSELORS.find((c) => c.id === normalizedPreferredCounselorId) || getCounselorForMenu(menu.id)
+      : getCounselorForMenu(menu.id);
+    let dbSessionId = session.dbSessionId;
+    if (!dbSessionId) {
+      dbSessionId = await createNewDbSession();
+    }
+    if (!dbSessionId) {
+      toast.error('채팅 세션을 준비하지 못했어. 잠시 후 다시 시도해줘.');
+      return;
+    }
+    const roomId = `room_${counselor.id}_${dbSessionId}_${Date.now()}`;
 
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
     const actualMenu = dbProduct 
       ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
       : { ...menu, price: price || menu.price };
 
+    // 새 방/새 메뉴로 이동할 때는 반드시 상태를 리셋해서 "이전 방에 붙어있는 문제"를 방지한다.
+    setTimerExpired(false);
+    setSessionTime(null);
+    setShowPayment(false);
+    setShowPremiumForm(false);
+    setShowScan(null);
+    setMessages([]);
+
     updateSession({
+      dbSessionId,
       selectedMenu: actualMenu,
       freeReadingDone: false,
       questionCount: 0,
@@ -653,6 +699,10 @@ export default function HowlChat() {
       userName: session.userName || userProfile?.nickname || '',
       roomId,
       counselorId: counselor.id,
+      isPaid: false,
+      paymentPending: false,
+      sessionExpiry: null,
+      maxQuestions: menu.id === 16 ? 3 : 1,
     });
 
     if (menu.id === 0) {
@@ -689,7 +739,7 @@ export default function HowlChat() {
     setShowScan(null);
     if (!image) return;
 
-    const counselor = session.selectedMenu ? getCounselorForMenu(session.selectedMenu.id) : undefined;
+    const counselor = resolveCurrentCounselor();
     await handleBotResponse(
       '사진을 분석해줘',
       session.selectedMenu?.name,
@@ -704,20 +754,29 @@ export default function HowlChat() {
     setShowExitModal(false);
 
     if (deleteChat) {
-      await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
+      if (session.dbSessionId) {
+        await supabase.from('messages').delete().eq('session_id', session.dbSessionId);
+      }
       addSystemMessage("대화 내용이 삭제되었습니다.");
     }
 
-    localStorage.removeItem('howl_session_id');
     localStorage.removeItem('howl_profile_id');
-    const newSessionId = `session_${Date.now()}_${Math.random()}`;
-    localStorage.setItem('howl_session_id', newSessionId);
-    sessionIdRef.current = newSessionId;
 
-    resetSession();
+    // 신규 DB 세션을 만들고, room 전환/목록 이동 시 "dbSessionId null" 상태가 되지 않게 한다.
+    const newId = await createNewDbSession();
+    sessionIdRef.current = newId || sessionIdRef.current;
     setView('landing');
     setUserProfile(null);
     setSessionTime(null);
+    setTimerExpired(false);
+    setIsMenuOpen(false);
+    setShowPayment(false);
+    setShowPremiumForm(false);
+    setShowPremiumReport(false);
+    setShowReview(false);
+    setShowScan(null);
+    setShowTimeSelection(false);
+    setSelectedMenuForTime(null);
     if (timerRef.current) clearInterval(timerRef.current);
     toast.info("상담을 종료했습니다");
   };
@@ -871,7 +930,10 @@ export default function HowlChat() {
               ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
               : menu;
             
-            const counselor = getCounselorForMenu(menu.id);
+            const restoredCounselorId = normalizeCounselorId(approvedPayment.counselor_id) || normalizeCounselorId(session.counselorId);
+            const counselor = restoredCounselorId
+              ? COUNSELORS.find((c) => c.id === restoredCounselorId) || getCounselorForMenu(menu.id)
+              : getCounselorForMenu(menu.id);
             const roomId = `room_${counselor.id}_${session.dbSessionId}_${Date.now()}`;
             
             updateSession({
@@ -905,23 +967,132 @@ export default function HowlChat() {
         toast.info("이전 결제 시간이 종료되었습니다. 추가 결제를 원하면 메뉴를 선택해주세요");
       }
     }
+
+    // 승인 결제가 없으면 로그인 직후 메뉴를 바로 띄워야 한다.
+    // (현재는 `isMenuOpen`이 false인 상태에서 `view='chat'`로 전환되어
+    //  상담사/메뉴 없이 "비어있는 chat"이 열릴 수 있음)
+    if (!profile.approvedPayment) {
+      // 기본 상담사(헤더 비어있음 방지)
+      updateSession({ counselorId: 'luna' });
+      setIsMenuOpen(true);
+    }
   };
 
-  const handleStartChat = (menuId?: number, counselorId?: string) => {
+  const handleStartChat = async (menuId?: number, counselorId?: string) => {
     if (!userProfile && !localStorage.getItem('howl_profile_id')) {
       setView('auth');
-    } else {
-      setView('chat');
-      if (menuId !== undefined) {
-        const menu = MENUS.find(m => m.id === menuId);
-        if (menu) {
-          if (counselorId) {
-            updateSession({ counselorId });
-          }
-          setTimeout(() => handleMenuSelect(menu), 500);
+      return;
+    }
+
+    // 다른 상담사/방으로 이동할 때는 UI 잔상을 먼저 정리한다.
+    setMessages([]);
+    setIsMenuOpen(false);
+    setShowPayment(false);
+    setShowPremiumForm(false);
+    setShowPremiumReport(false);
+    setShowReview(false);
+    setShowScan(null);
+    setShowTimeSelection(false);
+    setSelectedMenuForTime(null);
+    setTimerExpired(false);
+    setSessionTime(null);
+
+    setView('chat');
+
+    const normalizedCounselorId = normalizeCounselorId(counselorId);
+    const ensuredDbSessionId = session.dbSessionId || localStorage.getItem('howl_session_id') || (await createNewDbSession());
+
+    if (!ensuredDbSessionId) {
+      toast.error('채팅 세션을 준비하지 못했어. 잠시 후 다시 시도해줘.');
+      return;
+    }
+
+    const continueRoomId = localStorage.getItem('continue_room_id');
+    // `menuId`가 들어온 경우에는 새 상담 시작이므로, 남아있는 continue 값은 무시하고 제거한다.
+    if (continueRoomId && menuId !== undefined) {
+      localStorage.removeItem('continue_room_id');
+    }
+
+    if (continueRoomId && menuId === undefined) {
+      localStorage.removeItem('continue_room_id');
+
+      const storedSessionId = localStorage.getItem('howl_session_id');
+      const { data: sessionData } = storedSessionId
+        ? await supabase.from('chat_sessions').select('*').eq('id', storedSessionId).single()
+        : { data: null };
+
+      const selectedMenuId = sessionData?.selected_menu_id ?? null;
+      const resolvedMenu =
+        typeof selectedMenuId === 'number'
+          ? MENUS.find((m) => m.id === selectedMenuId) || ({ id: selectedMenuId } as Menu)
+          : null;
+
+      const isPaid = !!sessionData?.is_paid;
+      const rawSessionExpiry = (sessionData as any)?.session_expiry as unknown;
+      const resolvedExpiry = rawSessionExpiry ? new Date(rawSessionExpiry as any).getTime() : null;
+
+      let remainingSeconds: number | null = null;
+      let sessionExpiryForState: number | null = null;
+      let expired = false;
+      if (isPaid && resolvedExpiry) {
+        remainingSeconds = Math.floor((resolvedExpiry - Date.now()) / 1000);
+        if (remainingSeconds > 0) {
+          sessionExpiryForState = Date.now() + remainingSeconds * 1000;
+        } else {
+          expired = true;
         }
       }
+
+      if (expired) {
+        setTimerExpired(true);
+        setSessionTime(0);
+      } else if (remainingSeconds !== null) {
+        setSessionTime(remainingSeconds);
+      }
+
+      updateSession({
+        dbSessionId: ensuredDbSessionId,
+        userName: sessionData?.user_nickname || userProfile?.nickname || '',
+        selectedMenu: resolvedMenu,
+        isPaid,
+        roomId: continueRoomId,
+        counselorId: normalizedCounselorId || (sessionData?.counselor_id ?? undefined),
+        sessionExpiry: sessionExpiryForState,
+        maxQuestions: selectedMenuId === 16 ? 3 : 1,
+        paymentPending: false,
+      });
+      return;
     }
+
+    if (menuId !== undefined) {
+      if (normalizedCounselorId) {
+        // 상담사 타일 선택 직후 counselorId를 선반영해서
+        // 중간 분기(타임 선택 모달 등)로 room/selectedMenu가 늦게 갱신되어도
+        // 헤더/상담사 표기가 이전 상담사로 남는 문제를 방지한다.
+        updateSession({ counselorId: normalizedCounselorId });
+      }
+      const menu = MENUS.find((m) => m.id === menuId);
+      if (menu) {
+        await handleMenuSelect(menu, normalizedCounselorId);
+      } else {
+        setIsMenuOpen(true);
+      }
+      return;
+    }
+
+    // menuId가 없고 continue도 없다면: "상담사만 바꾼다"는 의미로 보고,
+    // 그 상담사의 기본 메뉴(첫 메뉴)로 새 방을 만든다.
+    if (normalizedCounselorId) {
+      const counselor = COUNSELORS.find((c) => c.id === normalizedCounselorId);
+      const fallbackMenuId = counselor?.menuIds?.[0];
+      const fallbackMenu = typeof fallbackMenuId === 'number' ? MENUS.find((m) => m.id === fallbackMenuId) : undefined;
+      if (fallbackMenu) {
+        await handleMenuSelect(fallbackMenu, normalizedCounselorId);
+        return;
+      }
+    }
+
+    setIsMenuOpen(true);
   };
 
   const handleLogout = () => {
@@ -970,11 +1141,7 @@ export default function HowlChat() {
     );
   }
 
-  const currentCounselor = session.selectedMenu
-    ? getCounselorForMenu(session.selectedMenu.id)
-    : session.counselorId
-      ? COUNSELORS.find(c => c.id === session.counselorId) || null
-      : null;
+  const currentCounselor = resolveCurrentCounselor();
 
   return (
     <div className="min-h-svh aurora-bg">
@@ -982,7 +1149,11 @@ export default function HowlChat() {
         sessionTime={sessionTime}
         counselorName={currentCounselor?.name}
         counselorImage={currentCounselor?.image}
-        onBack={() => setView('landing')}
+        onBack={() => {
+          setIsMenuOpen(false);
+          setShowTimeSelection(false);
+          setView('landing');
+        }}
         onExit={() => setShowExitModal(true)}
       />
 
@@ -1069,7 +1240,11 @@ export default function HowlChat() {
 
       <AnimatePresence>
         {isMenuOpen && (
-          <MenuGrid onSelect={handleMenuSelect} onClose={() => setIsMenuOpen(false)} counselorId={currentCounselor?.id} />
+          <MenuGrid
+            onSelect={(menu) => handleMenuSelect(menu, currentCounselor?.id)}
+            onClose={() => setIsMenuOpen(false)}
+            counselorId={currentCounselor?.id}
+          />
         )}
       </AnimatePresence>
 
@@ -1081,6 +1256,7 @@ export default function HowlChat() {
           onClose={() => {
             setShowTimeSelection(false);
             setSelectedMenuForTime(null);
+            setPreferredCounselorIdForTime(null);
           }}
         />
       )}
