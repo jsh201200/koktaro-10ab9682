@@ -1419,18 +1419,32 @@ export default function HowlChat() {
       )}
 
       {showReview && userProfile && session.dbSessionId && session.selectedMenu && (
-        <ReviewModal
-          sessionId={session.dbSessionId}
-          profileId={userProfile.id}
-          userName={userProfile.nickname}
-          menuName={session.selectedMenu.name}
-          paymentPrice={getDbPrice(session.selectedMenu.id)}
-          onClose={() => {
-            setShowReview(false);
-            setShowPremiumReport(true);
-          }}
-        />
-      )}
+  <ReviewModal
+    sessionId={session.dbSessionId}
+    profileId={userProfile.id}
+    userName={userProfile.nickname}
+    menuName={session.selectedMenu.name}
+    paymentPrice={getDbPrice(session.selectedMenu.id)}
+    onClose={() => {
+      setShowReview(false);
+      
+      // ✨ [차별화 로직] 메뉴 ID가 16번(프리미엄 종합분석)인 경우에만 리포트 노출
+      if (session.selectedMenu?.id === 16) {
+        setShowPremiumReport(true);
+      } else {
+        // 일반 메뉴는 리포트 없이 상담을 세션 정보를 초기화하며 종료합니다.
+        updateSession({ 
+          selectedMenu: null, 
+          isPaid: false,
+          freeReadingDone: false,
+          questionCount: 0,
+          sessionExpiry: null 
+        });
+        toast.success("상담이 종료되었습니다. 이용해주셔서 감사합니다!");
+      }
+    }}
+  />
+)}
 
       {showPremiumReport && (
         <PremiumReport
