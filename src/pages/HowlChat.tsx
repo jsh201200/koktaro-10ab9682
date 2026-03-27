@@ -638,8 +638,8 @@ export default function HowlChat() {
     const recommendations: { [key: string]: { name: string; specialty: string } } = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
-      'song': { name: '루나', specialty: '타로' },
-      'luna': { name: '수현', specialty: '심리상담' },
+      'song': { name: '루나', specialty: '타고난 기운' },
+      'luna': { name: '수현', specialty: '인간관계' },
       'suhyun': { name: '명화', specialty: '실질 해결책' },
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
@@ -667,7 +667,7 @@ export default function HowlChat() {
     }
 
     if (session.isPaid && session.selectedMenu) {
-      if (session.questionCount >= session.maxQuestions + 1) {
+      if (session.questionCount >= session.maxQuestions + 999) {
         addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘!");
 
         setTimeout(() => {
