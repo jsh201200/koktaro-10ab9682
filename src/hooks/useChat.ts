@@ -60,34 +60,6 @@ export function useChat() {
     const valid = ['ian', 'jihan', 'songsengsang', 'luna', 'suhyun', 'myunghwa'];
     return valid.includes(normalized) ? normalized : 'luna';
   };
-  useEffect(() => {
-    if (!session.dbSessionId) return;
-
-    const channel = supabase
-      .channel('session_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'chat_sessions',
-          filter: `id=eq.${session.dbSessionId}`,
-        },
-        (payload) => {
-          // 관리자가 결제 승인(is_paid: true)을 하면 바로 상태 반영!
-          if (payload.new.is_paid && !session.isPaid) {
-            setSession(prev => ({ ...prev, isPaid: true }));
-            addSystemMessage("🎉 입금이 확인되었습니다! 곧 상담이 시작됩니다.");
-            console.log("결제 승인 실시간 감지 완료!");
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session.dbSessionId, session.isPaid, addSystemMessage]);
 
   useEffect(() => {
     const initSession = async () => {
