@@ -1,3 +1,4 @@
+하울챗
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { AnimatePresence } from 'framer-motion';
@@ -408,13 +409,15 @@ export default function HowlChat() {
   return () => { supabase.removeChannel(channel); };
 }, [session.dbSessionId, session.userName, dbProducts]);
 
-  // ✨ activatePaidMode - useCallback으로 감싸서 최신 상태 참조
+// ✨ activatePaidMode - useCallback으로 감싸서 최신 상태 참조
   const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
-    if (menuId === 0) {
+    
+    // [분기 1] 단판 승부: 0번(한 뼘 운세)과 36번(타로 1질문)
+    if (menuId === 0 || menuId === 36) {
       updateSession({
         isPaid: true,
         sessionExpiry: null,
-        maxQuestions: 0,
+        maxQuestions: 1, // 딱 1번만 대답하고 끝!
         questionCount: 0,
         paymentPending: false,
       });
@@ -422,13 +425,59 @@ export default function HowlChat() {
       addSystemMessage("결제가 승인되었습니다!");
       toast.success("입금 확인 완료!");
 
-      const adviceList = generateAdviceMessages();
-      const colorList = generateColors();
-      const numberList = generateNumbers();
+      // 0번(한 뼘 운세)일 때만 랜덤 조언 메시지 발송
+      if (menuId === 0) {
+        const adviceList = generateAdviceMessages();
+        const colorList = generateColors();
+        const numberList = generateNumbers();
 
-      const randomAdvice = adviceList[Math.floor(Math.random() * adviceList.length)];
-      const randomColor = colorList[Math.floor(Math.random() * colorList.length)];
-      const randomNumber = numberList[Math.floor(Math.random() * numberList.length)];
+        const randomAdvice = adviceList[Math.floor(Math.random() * adviceList.length)];
+        const randomColor = colorList[Math.floor(Math.random() * colorList.length)];
+        const randomNumber = numberList[Math.floor(Math.random() * numberList.length)];
+
+        setTimeout(() => {
+          addBotMessage(
+            `오늘의 조언:\n\n${randomAdvice}\n\n` +
+            `럭키 컬러: ${randomColor}\n` +
+            `행운의 숫자: ${randomNumber}`
+          );
+        }, 500);
+
+        setTimeout(() => {
+          addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요");
+          updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+          setSessionTime(null);
+          setShowReview(true);
+        }, 3000);
+      } else {
+        // 36번(타로 1질문)일 때 환영 인사
+        setTimeout(() => {
+          addBotMessage(`타로 카드 리딩이 시작됐어요!\n\n궁금한 질문을 하나 해주세요`);
+        }, 500);
+      }
+      return; // 단판 승부 로직 끝! 밑으로 안 내려가게 막음
+    }
+
+    // [분기 2] 시간제 무제한 상담: 나머지 모든 번호 (8번~40번 등)
+    updateSession({
+      isPaid: true,
+      // 정해진 시간 동안만 상담 가능
+      sessionExpiry: Date.now() + durationMin * 60 * 1000,
+      maxQuestions: 999, // 질문은 사실상 무제한!
+      questionCount: 0,
+      paymentPending: false,
+    });
+    setTimerExpired(false);
+    addSystemMessage("결제가 승인되었습니다! 심층 리딩을 시작합니다.");
+    toast.success("입금 확인 완료! 상담을 이어갑니다");
+
+    setTimeout(() => {
+      const welcomeGuide = MENU_WELCOME_GUIDES[menuId];
+      const name = session.userName || userProfile?.nickname || '';
+      addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게. 궁금한 것을 말씀해주세요!`);
+    }, 800);
+
+  }, [addBotMessage, addSystemMessage, session.userName, userProfile, updateSession, setTimerExpired]);
 
       setTimeout(() => {
         addBotMessage(
@@ -638,8 +687,8 @@ export default function HowlChat() {
     const recommendations: { [key: string]: { name: string; specialty: string } } = {
       'ian': { name: '지한', specialty: '연애운' },
       'jihan': { name: '송선생', specialty: '길방' },
-      'song': { name: '루나', specialty: '타고난 기운' },
-      'luna': { name: '수현', specialty: '인간관계' },
+      'song': { name: '루나', specialty: '타로' },
+      'luna': { name: '수현', specialty: '심리상담' },
       'suhyun': { name: '명화', specialty: '실질 해결책' },
       'myunghwa': { name: '이안', specialty: '투자/재물운' },
     };
