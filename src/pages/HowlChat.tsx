@@ -372,26 +372,40 @@ export default function HowlChat() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [session.sessionExpiry, session.isPaid, view, addSystemMessage]);
 
-  useEffect(() => {
-    if (!session.dbSessionId) return;
-    const channel = supabase
-      .channel('payment-approval')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'payments',
-        filter: `session_id=eq.${session.dbSessionId}`,
-      }, (payload) => {
-        const updated = payload.new as any;
-        if (updated.status === 'approved') {
-          const product = dbProducts.find(p => p.menu_id === updated.menu_id);
-          const durationMin = product?.duration_minutes || 30;
-          activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [session.dbSessionId, session.userName, dbProducts]);
+ useEffect(() => {
+  if (!session.dbSessionId) {
+    console.warn('dbSessionId 없음');
+    return;
+  }
+
+  console.log('Realtime 구독 시작', {
+    dbSessionId: session.dbSessionId,
+    table: 'payments',
+  });
+
+  const channel = supabase
+    .channel(`payment-approval-${session.dbSessionId}`)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'payments',
+      filter: `session_id=eq.${session.dbSessionId}`,
+    }, (payload) => {
+      console.log('결제 승인 감지됨', payload);
+      const updated = payload.new as any;
+      if (updated.status === 'approved') {
+        console.log('승인됨! activatePaidMode 실행');
+        const product = dbProducts.find(p => p.menu_id === updated.menu_id);
+        const durationMin = product?.duration_minutes || 30;
+        activatePaidMode(durationMin, updated.menu_id, updated.menu_name, updated.price);
+      }
+    })
+    .subscribe((status) => {
+      console.log('구독 상태:', status);
+    });
+
+  return () => { supabase.removeChannel(channel); };
+}, [session.dbSessionId, session.userName, dbProducts]);
 
   // ✨ activatePaidMode - useCallback으로 감싸서 최신 상태 참조
   const activatePaidMode = useCallback((durationMin: number, menuId: number, menuName: string, price: number) => {
