@@ -116,6 +116,7 @@ export default function HowlChat() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const greetingSent = useRef(false);
   const sessionIdRef = useRef<string>(localStorage.getItem('howl_session_id') || `session_${Date.now()}_${Math.random()}`);
+  const approvedPaymentKeyRef = useRef<string | null>(null);
 
   // FIX 1: 페이지 로드 시 상담 중이면 바로 채팅방으로, 미결제면 메뉴 띄우기
   useEffect(() => {
@@ -484,6 +485,118 @@ export default function HowlChat() {
     }, 800);
   }, [addBotMessage, addSystemMessage, session.userName, userProfile, updateSession, setTimerExpired]);
 
+  const syncApprovedPayment = useCallback(async (payment: any, source: 'realtime' | 'polling') => {
+    if (!payment || payment.status !== 'approved' || !session.dbSessionId) return;
+
+    const paymentKey = `${payment.id || 'unknown'}:${payment.approved_at || payment.updated_at || payment.created_at || ''}`;
+    if (approvedPaymentKeyRef.current === paymentKey) return;
+    approvedPaymentKeyRef.current = paymentKey;
+
+    console.log(`승인 결제 동기화 (${source})`, payment);
+
+    const menu = MENUS.find((m) => m.id === payment.menu_id);
+    const dbProduct = dbProducts.find((p) => p.menu_id === payment.menu_id);
+    const actualMenu = menu
+      ? (dbProduct ? { ...menu, price: dbProduct.price, name: dbProduct.name } : menu)
+      : session.selectedMenu;
+
+    const restoredCounselorId =
+      normalizeCounselorId(payment.counselor_id) ||
+      normalizeCounselorId(session.counselorId) ||
+      (actualMenu ? getCounselorForMenu(actualMenu.id).id : 'luna');
+
+    const counselor = COUNSELORS.find((c) => c.id === restoredCounselorId) ||
+      (actualMenu ? getCounselorForMenu(actualMenu.id) : COUNSELORS[0]);
+
+    const roomId = session.roomId || `room_${counselor.id}_${session.dbSessionId}_${Date.now()}`;
+
+    updateSession({
+      dbSessionId: session.dbSessionId,
+      userName: session.userName || userProfile?.nickname || payment.user_nickname || '',
+      selectedMenu: actualMenu || session.selectedMenu,
+      roomId,
+      counselorId: counselor.id,
+      paymentPending: false,
+    });
+
+    setShowPayment(false);
+
+    const durationMin = dbProduct?.duration_minutes || 30;
+    activatePaidMode(
+      durationMin,
+      payment.menu_id,
+      actualMenu?.name || payment.menu_name || '',
+      payment.final_price || payment.price || 0,
+    );
+  }, [activatePaidMode, dbProducts, normalizeCounselorId, session.counselorId, session.dbSessionId, session.roomId, session.selectedMenu, session.userName, updateSession, userProfile]);
+
+  useEffect(() => {
+    if (!session.dbSessionId || session.isPaid) return;
+
+    console.log('결제 승인 Realtime 구독 시작', session.dbSessionId);
+
+    const channel = supabase
+      .channel(`payment-approval-${session.dbSessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `session_id=eq.${session.dbSessionId}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          console.log('결제 승인 UPDATE 감지', updated);
+          if (updated?.status === 'approved') {
+            void syncApprovedPayment(updated, 'realtime');
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('결제 승인 구독 상태:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session.dbSessionId, session.isPaid, syncApprovedPayment]);
+
+  useEffect(() => {
+    if (!session.dbSessionId || session.isPaid) return;
+
+    let cancelled = false;
+
+    const checkLatestPayment = async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('session_id', session.dbSessionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled || error || !data) {
+        if (error) console.error('결제 상태 polling 실패', error);
+        return;
+      }
+
+      if (data.status === 'approved') {
+        await syncApprovedPayment(data, 'polling');
+      }
+    };
+
+    void checkLatestPayment();
+    const intervalId = window.setInterval(() => {
+      void checkLatestPayment();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [session.dbSessionId, session.isPaid, syncApprovedPayment]);
+
   const delayedTyping = useCallback((): Promise<void> => {
     return new Promise(resolve => setTimeout(resolve, TYPING_DELAY_MS));
   }, []);
@@ -821,6 +934,7 @@ export default function HowlChat() {
 
   const handlePaymentSubmit = async (method: 'kakaopay' | 'bank', depositor: string, phoneTail: string, discountType?: string, couponId?: string) => {
     const menu = session.selectedMenu!;
+    approvedPaymentKeyRef.current = null;
     setShowPayment(false);
 
     const dbPrice = getDbPrice(menu.id);
@@ -893,6 +1007,7 @@ export default function HowlChat() {
 
   const handlePremiumSubmit = async (questions: string[], depositor: string, phoneTail: string) => {
     setShowPremiumForm(false);
+    approvedPaymentKeyRef.current = null;
     const dbProduct = dbProducts.find(p => p.menu_id === 16);
     const price = dbProduct?.price || 79000;
     const menu = { id: 16, name: dbProduct?.name || '종합운명분석', price } as Menu;
