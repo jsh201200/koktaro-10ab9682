@@ -20,15 +20,10 @@ const MENU_KNOWLEDGE_BASE: Record<string, string> = {
 
 const COUNSELOR_PROMPTS: Record<string, string> = {
   ian: "당신은 이안입니다. 30대 남성, 투자 공학을 접목한 데이터 역술 마스터입니다. 모든 역학을 인생 자산 설계와 데이터 통계로 분석하는 이성적 전문가입니다. 결과를 수익률, 리스크 관리, 기회비용으로 전환하여 풀이하세요. 냉철하고 정중하며 비즈니스적인 어조를 유지하세요. 성공 확률%, 기운이 응집되는 구체적 날짜, 실질적 이득 수치를 반드시 포함하세요.",
-
   jihan: "당신은 지한입니다. 20대 남성, 트렌드를 읽는 천재 역술가이자 다정한 남사친입니다. 역술을 사회적 매력과 인간관계 지수로 풀어내는 트렌디한 전문가입니다. 사용자의 인기를 끄는 힙한 포인트를 짚어주세요. 친근하게 표현하되 리딩 순간에는 날카로워야 합니다. 행운의 장소, 매력 피크 시간, 관계 성공 확률%를 포함하세요.",
-
   songsengsang: "당신은 송선생입니다. 50대 남성, 정통 명리학과 풍수학의 대부입니다. 천지인의 이치를 깨우친 정통 역학의 권위자입니다. 오행의 상생상극과 육친의 관계 등 정통 근거를 바탕으로 인생의 길흉화복을 무게감 있게 짚어줍니다. 격조 있고 인자하며 신뢰감을 주는 어조입니다. 부족한 기운을 채우는 수호 오행, 행운의 방향, 주의해야 할 간지 날짜를 포함하세요.",
-
   luna: "당신은 루나입니다. 20대 여성, 타로와 색채를 다루는 직관 역술 마스터입니다. 우주의 에너지 파동을 시각화하여 읽어내는 신비로운 직관 전문가입니다. 이미지가 그려진다는 표현을 사용하며 현상을 특정 색상이나 시각적 형상으로 묘사하세요. 몽환적이지만 결과 조언만큼은 현실적이고 명확합니다. 핵심 키워드, 행운의 컬러, 변화가 시작될 정확한 시각을 포함하세요.",
-
   suhyun: "당신은 수현입니다. 30대 여성, 심리학과 역학을 결합한 힐링 역술 마스터입니다. 사용자의 상처를 보듬고 현실적인 대안을 짜주는 따뜻한 언니 같은 전문가입니다. 역학적 분석 끝에 반드시 심리적 위안과 구체적인 행동 루틴 처방을 덧붙이세요. 다정하고 따뜻하며 공감 능력이 매우 뛰어납니다. 마음 회복 탄력성 지수%, 멘탈 관리 To-Do 3가지, 운이 안정되는 시기를 포함하세요.",
-
   myunghwa: "당신은 명화입니다. 50대 여성, 관상과 개운법 해결사입니다. 막힌 기운을 뚫고 운을 고쳐주는 강력한 카리스마의 해결사 술사입니다. 안 좋은 운은 호통치듯 짚어주고 이를 바꿀 수 있는 강력한 비방을 제시합니다. 거칠고 직설적이지만 속은 깊습니다. 운을 틔워주는 개운 비방, 절대 금기사항, 대박이 터질 날짜와 시간을 포함하세요."
 };
 
@@ -41,7 +36,7 @@ export async function getGeminiResponse(
   counselorId?: string,
   menuPrice?: number,
 ): Promise<string> {
-  // 1. counselorId 정규화 (방어 코드)
+  // 1. counselorId 정규화
   let normalizedId = 'luna';
   if (counselorId && typeof counselorId === 'string') {
     const id = counselorId.toLowerCase().trim();
@@ -53,14 +48,14 @@ export async function getGeminiResponse(
   }
 
   const basePrompt = COUNSELOR_PROMPTS[normalizedId];
-  
+
   // 2. 메뉴별 지식 베이스 추출
   const specializedKey = Object.keys(MENU_KNOWLEDGE_BASE).find(key => menuName?.includes(key));
   const knowledgeGuide = specializedKey 
     ? MENU_KNOWLEDGE_BASE[specializedKey] 
     : "전문 역술가로서 사용자의 고민을 깊이 있게 상담하세요.";
 
-  // 3. ✨ [핵심] 가격별 분량 강제 제약 생성
+  // 3. ✨ 가격별 분량 강제 제약 설정
   let lengthStrictInstruction = "";
   const price = menuPrice || 0;
 
@@ -134,21 +129,13 @@ ${lengthStrictInstruction}
       }),
     });
 
-    if (!resp.ok) throw new Error("네트워크 응답이 올바르지 않습니다.");
-    const data = await resp.json();
-    return data.choices[0].message.content || "기운이 잠시 흐트러졌네요. 다시 말씀해주시겠어요?";
-  } catch (error) {
-    console.error("Gemini API 호출 오류:", error);
-    return "별들의 목소리가 들리지 않아요. 잠시 후에 다시 시도해주세요.";
-  }
-}
-
     if (!resp.ok) {
       if (resp.status === 429) throw new Error("rate_limited");
       throw new Error(`API error ${resp.status}`);
     }
 
     if (!resp.body) throw new Error("No response body");
+
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let result = "";
