@@ -641,45 +641,54 @@ export default function HowlChat() {
   const handleSend = async (text: string, image?: string) => {
     addUserMessage(text, image);
 
-    if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
-      addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요");
-      updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
-      setSessionTime(null);
-      setShowReview(true);
-      return;
-    }
+// 1. [특수] 오늘의 운세(0번) - 한 번 질문하면 즉시 종료
+if (session.isPaid && session.selectedMenu && session.selectedMenu.id === 0) {
+  addBotMessage("오늘의 기운을 모두 읽어드렸어요! 내일도 좋은 하루 되세요. 🌈");
+  setTimeout(() => {
+    updateSession({ isPaid: false, freeReadingDone: false, sessionExpiry: null });
+    setSessionTime(null);
+    setShowReview(true); // 바로 후기 팝업
+  }, 1500);
+  return;
+}
 
-    if (session.isPaid && session.selectedMenu) {
-      if (session.questionCount >= session.maxQuestions + 1) {
-        addBotMessage("이번 고민에 대한 기운은 여기까지야! 더 깊은 상담은 메뉴에서 새로 골라줘!");
+// 2. [일반] 유료 상담 처리
+if (session.isPaid && session.selectedMenu) {
+  // 스캔 메뉴(손금 등) 예외 처리
+  if (image && [2, 12].includes(session.selectedMenu.id)) {
+    setShowScan(image);
+    return;
+  }
 
-        setTimeout(() => {
-          handleCrossSelling();
-        }, 1500);
+  // 질문 카운트 증가 및 답변 대기
+  const nextCount = session.questionCount + 1;
+  updateSession({ questionCount: nextCount });
+  
+  const counselor = resolveCurrentCounselor();
+  await handleBotResponse(
+    text,
+    session.selectedMenu.name,
+    true,
+    image,
+    counselor?.id,
+    getDbPrice(session.selectedMenu.id)
+  );
 
-        updateSession({ isPaid: false, selectedMenu: null, freeReadingDone: false, questionCount: 0, sessionExpiry: null });
+  // ✨ [핵심] 답변이 끝난 후, '1회성 상담'인 경우에만 즉시 종료 로직 실행
+  if (session.maxQuestions < 999 && nextCount >= session.maxQuestions) {
+    setTimeout(() => {
+      addBotMessage("이번 고민에 대한 기운은 여기까지예요! 더 깊은 상담은 메뉴에서 새로 골라주세요. ✨");
+      
+      setTimeout(() => {
+        // 후기 창이 뜰 때까지 selectedMenu는 null로 만들지 마세요!
+        updateSession({ isPaid: false, freeReadingDone: false, sessionExpiry: null });
         setSessionTime(null);
         setShowReview(true);
-        return;
-      }
-
-      if (image && [2, 12].includes(session.selectedMenu.id)) {
-        setShowScan(image);
-        return;
-      }
-
-      updateSession({ questionCount: session.questionCount + 1 });
-      const counselor = resolveCurrentCounselor();
-      await handleBotResponse(
-        text,
-        session.selectedMenu.name,
-        true,
-        image,
-        counselor?.id,
-        getDbPrice(session.selectedMenu.id)
-      );
-      return;
-    }
+      }, 1500); // 종료 멘트 후 1.5초 뒤 후기 팝업
+    }, 1000); // AI 답변 후 1초 뒤 종료 멘트
+  }
+  return;
+}
 
     if (!session.userName && !userProfile?.nickname) {
       const name = text.trim().replace(/[^\uac00-\ud7a3a-zA-Z0-9\s]/g, '').trim();
