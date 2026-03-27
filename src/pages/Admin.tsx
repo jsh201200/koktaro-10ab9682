@@ -308,17 +308,49 @@ export default function AdminDashboard() {
   }, [isAuthorized]);
 
   const handleApprovePayment = async (paymentId: string) => {
+    const targetPayment = payments.find((payment) => payment.id === paymentId);
+    const approvedAt = new Date().toISOString();
+
     const { error } = await supabase
       .from('payments')
-      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .update({ status: 'approved', approved_at: approvedAt })
       .eq('id', paymentId);
 
     if (error) {
       toast.error('승인 실패');
-    } else {
-      toast.success('결제가 승인되었습니다!');
-      fetchPayments();
+      return;
     }
+
+    if (targetPayment?.session_id) {
+      const { data: product } = targetPayment.menu_id
+        ? await supabase
+            .from('products')
+            .select('duration_minutes')
+            .eq('menu_id', targetPayment.menu_id)
+            .maybeSingle()
+        : { data: null };
+
+      const durationMinutes = product?.duration_minutes || 30;
+      const sessionExpiry = targetPayment.menu_id && targetPayment.menu_id !== 0
+        ? new Date(Date.now() + durationMinutes * 60 * 1000).toISOString()
+        : null;
+
+      const { error: sessionError } = await supabase
+        .from('chat_sessions')
+        .update({
+          is_paid: true,
+          selected_menu_id: targetPayment.menu_id,
+          session_expiry: sessionExpiry,
+        })
+        .eq('id', targetPayment.session_id);
+
+      if (sessionError) {
+        console.error('chat_sessions 동기화 실패', sessionError);
+      }
+    }
+
+    toast.success('결제가 승인되었습니다!');
+    fetchPayments();
   };
 
   const handleDeletePayment = async (paymentId: string) => {
