@@ -63,6 +63,8 @@ const SAMPLE_REVIEWS = [
 ];
 
 export default function LandingPage({ onStartChat, couponActive, userCredits, userName, onCheckCredits }: LandingPageProps) {
+  const normalizeCounselorId = (id: string) => (id === 'songsengsang' ? 'song' : id);
+
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [ongoingConsults, setOngoingConsults] = useState<Map<string, OngoingConsult>>(new Map());
@@ -147,7 +149,7 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
 
       if (sessions && sessions.room_id) {
         const roomParts = sessions.room_id.split('_');
-        const counselorId = roomParts[1];
+        const counselorId = normalizeCounselorId(roomParts[1]);
         const counselor = COUNSELORS.find(c => c.id === counselorId);
 
         if (counselor) {
@@ -174,6 +176,9 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
   const handleStartConsult = (counselorId: string) => {
     const counselor = COUNSELORS.find(c => c.id === counselorId);
     if (counselor && counselor.menuIds.length > 0) {
+      // 새 상담을 시작할 때는 "이어하기"용 continue 정보가 남아있지 않게 한다.
+      localStorage.removeItem('continue_room_id');
+
       // 🧹 새로운 상담 시작 시 이전 상담 내용을 화면에서 비웁니다.
       if (typeof setMessages === 'function') {
         setMessages([]);
@@ -197,6 +202,7 @@ export default function LandingPage({ onStartChat, couponActive, userCredits, us
     localStorage.removeItem('howl_profile_id');
     localStorage.removeItem('howl_session_id');
     localStorage.removeItem('howl_last_auth_id');
+    localStorage.removeItem('continue_room_id');
     window.location.reload();
   };
 
