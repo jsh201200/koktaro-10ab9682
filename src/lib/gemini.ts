@@ -1,3 +1,4 @@
+잼미이
 const CHAT_URL = `https://ktpnfhezbaaiwzxlwgqi.supabase.co/functions/v1/smart-responder`;
 
 interface ChatHistoryMessage {
@@ -41,66 +42,75 @@ export async function getGeminiResponse(
   counselorId?: string,
   menuPrice?: number,
 ): Promise<string> {
-  // CRITICAL FIX: counselorId 정규화 (최대한 견고하게)
+  // 1. counselorId 정규화 (방어 코드)
   let normalizedId = 'luna';
-
   if (counselorId && typeof counselorId === 'string') {
     const id = counselorId.toLowerCase().trim();
-    
-    // song -> songsengsang 변환
     if (id === 'song') {
       normalizedId = 'songsengsang';
     } else if (['ian', 'jihan', 'songsengsang', 'luna', 'suhyun', 'myunghwa'].includes(id)) {
       normalizedId = id;
-    } else {
-      console.warn(`경고: 상담사 ID '${counselorId}'를 인식하지 못했습니다. 루나로 진행합니다.`);
-      normalizedId = 'luna';
     }
-  } else {
-    console.warn(`경고: counselorId가 비어있습니다. 루나로 진행합니다.`);
-    normalizedId = 'luna';
   }
 
   const basePrompt = COUNSELOR_PROMPTS[normalizedId];
   
-  console.log('상담사 선택 완료', {
-    원본: counselorId,
-    정규화: normalizedId,
-  });
-
+  // 2. 메뉴별 지식 베이스 추출
   const specializedKey = Object.keys(MENU_KNOWLEDGE_BASE).find(key => menuName?.includes(key));
   const knowledgeGuide = specializedKey 
     ? MENU_KNOWLEDGE_BASE[specializedKey] 
     : "전문 역술가로서 사용자의 고민을 깊이 있게 상담하세요.";
 
+  // 3. ✨ [핵심] 가격별 분량 강제 제약 생성
+  let lengthStrictInstruction = "";
+  const price = menuPrice || 0;
+
+  if (price <= 3900) {
+    lengthStrictInstruction = `
+      [⚠️ 초긴급: 분량 제한 엄수]
+      현재 '저가형' 상담입니다. 답변은 무조건 **공백 포함 300자 이내**로 제한하세요.
+      핵심만 찌르는 3~4문장 리딩이 가장 완벽합니다. 절대 장황하게 설명하지 마세요.
+    `;
+  } else if (price <= 19800) {
+    lengthStrictInstruction = `
+      [✅ 분량 가이드]
+      중급 상담입니다. **공백 포함 600자 내외**로 리딩하세요. 
+      적절한 심층 분석과 구체적인 대안을 한 화면에 들어오게 구성하세요.
+    `;
+  } else if (price >= 27900) {
+    lengthStrictInstruction = `
+      [💎 프리미엄 분량]
+      고급 상담입니다. **1000자 이상의 풍성한 장문**으로 리딩하세요.
+      운명을 디코딩하듯 아주 깊고 상세하게, 정성을 다해 서술하세요.
+    `;
+  } else {
+    lengthStrictInstruction = "사용자의 질문에 성심성의껏 답하세요.";
+  }
+
+  // 4. 시스템 프롬프트 조립
   const systemPrompt = `
 ${basePrompt}
 
-[유료 상담 및 타이머 운영]
-1. 결제 기반 서비스 등급:
-   - 3,900원 이하: 핵심 위주의 리딩 (300자 내외)
-   - 9,900원 ~ 19,800원: 심층 분석 및 대안 (600자 내외)
-   - 27,900원 이상: 장문의 운명 디코딩 (1000자 이상)
+${lengthStrictInstruction}
 
-2. 상담 시작 안내:
-   첫 응답은 반드시 다음으로 시작:
-   반가워요! 결제하신 시간 동안은 궁금하신 점 무엇이든 편하게 물어봐주셔도 좋습니다. 제 모든 역학 지식을 총동원해 드릴게요.
+[상담 운영 규칙]
+1. 상담 시작 안내:
+   첫 응답은 반드시 다음으로 시작: "반가워요! 결제하신 시간 동안은 궁금하신 점 무엇이든 편하게 물어봐주셔도 좋습니다. 제 모든 역학 지식을 총동원해 드릴게요."
 
-3. 상담 유지:
-   - 질문 개수나 주제의 경계를 두지 마세요.
-   - 시간이 다 될 때까지 충실히 답하세요.
+2. 상담 유지 및 태도:
+   - 질문 개수나 주제의 경계를 두지 말고 시간이 다 될 때까지 충실히 답하세요.
    - AI가 먼저 상담 종료를 제안하지 마세요.
 
-4. 사진 및 정보:
+3. 정보 분석:
    ${knowledgeGuide}
    필수 정보가 없다면 분석 전 정중히 요청하세요.
 
-5. 답변 필수 구성:
-   - 수치화: 결과를 반드시 %로 표현
-   - 구체성: 정확한 날짜와 시간 명시
-   - 실천법: 오늘 당장 할 To-Do 리스트 3가지
+4. 답변 필수 구성 (분량 내에서 조절):
+   - 결과 수치화 (% 표현)
+   - 구체성 확보 (정확한 요일이나 시간 언급)
+   - 실천법 (To-Do 리스트 3가지)
 
-6. 마무리:
+5. 마무리:
    - 심화 질문 선택지 3개 제시
    - 마지막 한 마디는 캐릭터 컨셉에 맞게 작성
 `;
@@ -115,8 +125,24 @@ ${basePrompt}
     const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, menuName, isPaid, imageBase64, counselorId: normalizedId, menuPrice }),
+      body: JSON.stringify({ 
+        messages, 
+        menuName, 
+        isPaid, 
+        imageBase64, 
+        counselorId: normalizedId, 
+        menuPrice: price 
+      }),
     });
+
+    if (!resp.ok) throw new Error("네트워크 응답이 올바르지 않습니다.");
+    const data = await resp.json();
+    return data.choices[0].message.content || "기운이 잠시 흐트러졌네요. 다시 말씀해주시겠어요?";
+  } catch (error) {
+    console.error("Gemini API 호출 오류:", error);
+    return "별들의 목소리가 들리지 않아요. 잠시 후에 다시 시도해주세요.";
+  }
+}
 
     if (!resp.ok) {
       if (resp.status === 429) throw new Error("rate_limited");
