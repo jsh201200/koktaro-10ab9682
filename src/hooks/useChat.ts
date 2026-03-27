@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Menu } from '@/data/menus';
 
@@ -150,7 +150,7 @@ export function useChat() {
     fetchRoomMessages();
   }, [session.roomId, session.dbSessionId]);
 
-  // FIX 3: 메시지 저장 시 roomId 확인
+
   const saveChatMessage = useCallback(async (role: string, content: string, imageUrl?: string) => {
     if (!session.dbSessionId || !session.roomId) {
       console.warn('roomId 없어서 메시지 저장 안 함', { sessionId: session.dbSessionId, roomId: session.roomId });
@@ -253,6 +253,48 @@ export function useChat() {
       return next;
     });
   }, []);
+
+  // ====== 결제 승인 실시간 감지 ======
+  const updateSessionRef = useRef(updateSession);
+  const addSystemMessageRef = useRef(addSystemMessage);
+  useEffect(() => { updateSessionRef.current = updateSession; }, [updateSession]);
+  useEffect(() => { addSystemMessageRef.current = addSystemMessage; }, [addSystemMessage]);
+
+  useEffect(() => {
+    if (!session.dbSessionId) return;
+
+    console.log('💳 결제 승인 실시간 감시 시작!', session.dbSessionId);
+
+    const channel = supabase
+      .channel(`payment-approval-${session.dbSessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `session_id=eq.${session.dbSessionId}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          console.log('💳 payments 테이블 변화 감지:', updated);
+
+          if (updated.status === 'approved') {
+            console.log('✅ 결제 승인 확인! 유료 모드 활성화');
+            updateSessionRef.current({ isPaid: true, paymentPending: false });
+            addSystemMessageRef.current('🎉 입금이 확인되었습니다! 이제 상담을 이어갈 수 있어요.');
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('💳 실시간 채널 상태:', status);
+      });
+
+    return () => {
+      console.log('💳 결제 감시 채널 해제');
+      supabase.removeChannel(channel);
+    };
+  }, [session.dbSessionId]);
 
   const resetSession = useCallback(() => {
     setMessages([]);
