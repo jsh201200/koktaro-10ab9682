@@ -455,15 +455,14 @@ export default function HowlChat() {
           addBotMessage(`타로 카드 리딩이 시작됐어요!\n\n궁금한 질문을 하나 해주세요`);
         }, 500);
       }
-      return; // 단판 승부 로직 끝! 밑으로 안 내려가게 막음
+      return; // 단판 승부 로직 끝!
     }
 
     // [분기 2] 시간제 무제한 상담: 나머지 모든 번호 (8번~40번 등)
     updateSession({
       isPaid: true,
-      // 정해진 시간 동안만 상담 가능
       sessionExpiry: Date.now() + durationMin * 60 * 1000,
-      maxQuestions: 999, // 질문은 사실상 무제한!
+      maxQuestions: 999, // 질문 무제한
       questionCount: 0,
       paymentPending: false,
     });
@@ -476,9 +475,7 @@ export default function HowlChat() {
       const name = session.userName || userProfile?.nickname || '';
       addBotMessage(welcomeGuide || `${name}님, 결제가 확인됐어! 이제 심층 리딩을 시작할게. 궁금한 것을 말씀해주세요!`);
     }, 800);
-
   }, [addBotMessage, addSystemMessage, session.userName, userProfile, updateSession, setTimerExpired]);
-
       setTimeout(() => {
         addBotMessage(
           `오늘의 조언:\n\n${randomAdvice}\n\n` +
