@@ -1,4 +1,3 @@
-잼미이
 const CHAT_URL = `https://ktpnfhezbaaiwzxlwgqi.supabase.co/functions/v1/smart-responder`;
 
 interface ChatHistoryMessage {
