@@ -781,12 +781,13 @@ if (session.isPaid && session.selectedMenu) {
     await proceedWithMenu(menu, product.price, product.duration_minutes, counselorIdForTime);
   };
 
-  // FIX 3: roomId 생성 시 상담사별 고유 방 생성
+// FIX 3: roomId 생성 시 상담사별 고유 방 생성
   const proceedWithMenu = async (menu: Menu, price?: number, duration?: number, preferredCounselorId?: string) => {
     const normalizedPreferredCounselorId = normalizeCounselorId(preferredCounselorId);
     const counselor = normalizedPreferredCounselorId
       ? COUNSELORS.find((c) => c.id === normalizedPreferredCounselorId) || getCounselorForMenu(menu.id)
       : getCounselorForMenu(menu.id);
+      
     let dbSessionId = session.dbSessionId;
     if (!dbSessionId) {
       dbSessionId = await createNewDbSession();
@@ -795,6 +796,7 @@ if (session.isPaid && session.selectedMenu) {
       toast.error('채팅 세션을 준비하지 못했어. 잠시 후 다시 시도해줘.');
       return;
     }
+    
     const roomId = `room_${counselor.id}_${dbSessionId}_${Date.now()}`;
 
     const dbProduct = dbProducts.find(p => p.menu_id === menu.id);
@@ -802,13 +804,15 @@ if (session.isPaid && session.selectedMenu) {
       ? { ...menu, price: dbProduct.price, name: dbProduct.name } 
       : { ...menu, price: price || menu.price };
 
-    // 새 방/새 메뉴로 이동할 때는 반드시 상태를 리셋해서 "이전 방에 붙어있는 문제"를 방지한다.
-    setTimerExpired(false);
-    setSessionTime(null);
-    setShowPayment(false);
-    setShowPremiumForm(false);
-    setShowScan(null);
-    setMessages([]);
+    // ✨ [상태 리셋 확장판] 새 상담 시작 전, 이전 UI의 모든 잔상을 강제로 초기화합니다.
+    setTimerExpired(false);       // 타이머 상태 초기화
+    setSessionTime(null);         // 시간 초기화
+    setShowPayment(false);        // 결제창 초기화
+    setShowPremiumForm(false);    // 프리미엄 폼 초기화
+    setShowScan(null);            // 스캔 애니메이션 해제
+    setShowReview(false);         // 👈 [추가] 이전 상담 후기 창 강제 종료
+    setShowPremiumReport(false);  // 👈 [추가] 이전 리포트 창 강제 종료
+    setMessages([]);              // 이전 대화 내역 비우기
 
     updateSession({
       dbSessionId,
@@ -822,9 +826,11 @@ if (session.isPaid && session.selectedMenu) {
       isPaid: false,
       paymentPending: false,
       sessionExpiry: null,
-      maxQuestions: menu.id === 16 ? 3 : 1,
+      // ✨ [융통성 있는 질문 제한] 0번(운세), 36번(타로1장)만 1회, 나머지는 무제한(999회)
+      maxQuestions: (menu.id === 0 || menu.id === 36) ? 1 : 999,
     });
 
+    // 0번(오늘의 운세) 처리
     if (menu.id === 0) {
       if (loadSettings().testMode) {
         activatePaidMode(30, menu.id, actualMenu.name, actualMenu.price);
@@ -835,11 +841,13 @@ if (session.isPaid && session.selectedMenu) {
       return;
     }
 
+    // 16번(프리미엄 상담) 처리
     if (menu.id === 16) {
       setShowPremiumForm(true);
       return;
     }
 
+    // 테스트 모드일 때의 사전 인사 처리
     if (loadSettings().testMode) {
       activatePaidMode(duration || 30, menu.id, actualMenu.name, actualMenu.price);
       addSystemMessage('테스트 모드: 결제 없이 상담 시작');
@@ -851,7 +859,7 @@ if (session.isPaid && session.selectedMenu) {
       return;
     }
 
-    // ✨ 결제창 띄우기 전에 상담사가 먼저 인사
+    // ✨ [상담사 인사] 결제창 띄우기 전에 상담사가 먼저 친절하게 인사합니다.
     setTimeout(() => {
       const hour = new Date().getHours();
       let timeGreeting = '';
@@ -863,17 +871,19 @@ if (session.isPaid && session.selectedMenu) {
 
       const name = session.userName || userProfile?.nickname || '';
       const counselorTones: Record<string, string> = {
-        'ian': `${name}님 ${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼\n\n결제 후 바로 심층 리딩을 시작할게요!`,
+        'ian': `${name}님, ${timeGreeting}... 자산과 운명을 동시에 챙겨야 하는 시간이네요. 💼\n\n결제 후 바로 심층 리딩을 시작할게요!`,
         'jihan': `${name}! ${timeGreeting}! 오늘따라 운이 어떨까? 함께 봐봐! 😎\n\n결제하면 바로 시작해줄게!`,
         'song': `${name}님, ${timeGreeting}. 이 시간의 기운을 함께 읽어보겠습니다. ✨\n\n결제 확인 후 바로 상담을 시작하겠습니다.`,
-        'luna': `${name}님 ${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙\n\n결제 후 바로 리딩을 시작할게요!`,
-        'suhyun': `${name}님 ${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂\n\n결제 확인되면 바로 시작할게요!`,
+        'luna': `${name}님, ${timeGreeting}... 별들과 당신의 에너지가 공명하고 있어요. 🌙\n\n결제 후 바로 리딩을 시작할게요!`,
+        'suhyun': `${name}님, ${timeGreeting}... 당신의 마음이 저한테 들려요. 🫂\n\n결제 확인되면 바로 시작할게요!`,
         'myunghwa': `${name}! ${timeGreeting}. 자, 솔직하게 봐보자! 🔥\n\n결제하면 바로 시작해줄게!`,
       };
+      
       const greeting = counselorTones[counselor.id] || `${name}님, 안녕하세요! ${actualMenu.name} 상담을 시작할게요. 결제 후 바로 이어집니다! ✨`;
       addBotMessage(greeting);
     }, 300);
 
+    // 인사가 나간 뒤 결제창 노출
     setShowPayment(true);
   };
 
