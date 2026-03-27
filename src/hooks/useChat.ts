@@ -254,47 +254,34 @@ export function useChat() {
     });
   }, []);
 
-  // ====== 결제 승인 실시간 감지 ======
-  const updateSessionRef = useRef(updateSession);
-  const addSystemMessageRef = useRef(addSystemMessage);
-  useEffect(() => { updateSessionRef.current = updateSession; }, [updateSession]);
-  useEffect(() => { addSystemMessageRef.current = addSystemMessage; }, [addSystemMessage]);
+  // 결제 승인 후 실제 상담 시작 로직은 HowlChat에서
+  // Realtime + polling 폴백으로 일원화해서 처리한다.
 
-  useEffect(() => {
-    if (!session.dbSessionId) return;
+  const createNewDbSession = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .insert({
+        user_agent: navigator.userAgent,
+        referrer: document.referrer || null,
+      })
+      .select()
+      .single();
 
-    console.log('💳 결제 승인 실시간 감시 시작!', session.dbSessionId);
+    if (error || !data) {
+      console.error('새 세션 생성 실패', error);
+      return null;
+    }
 
-    const channel = supabase
-      .channel(`payment-approval-${session.dbSessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'payments',
-          filter: `session_id=eq.${session.dbSessionId}`,
-        },
-        (payload) => {
-          const updated = payload.new as any;
-          console.log('💳 payments 테이블 변화 감지:', updated);
-
-          if (updated.status === 'approved') {
-            console.log('✅ 결제 승인 확인! 유료 모드 활성화');
-            updateSessionRef.current({ isPaid: true, paymentPending: false });
-            addSystemMessageRef.current('🎉 입금이 확인되었습니다! 이제 상담을 이어갈 수 있어요.');
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('💳 실시간 채널 상태:', status);
-      });
-
-    return () => {
-      console.log('💳 결제 감시 채널 해제');
-      supabase.removeChannel(channel);
-    };
-  }, [session.dbSessionId]);
+    localStorage.setItem('howl_session_id', data.id);
+    setMessages([]);
+    setSession(prev => ({
+      ...INITIAL_SESSION,
+      userName: prev.userName,
+      dbSessionId: data.id,
+    }));
+    console.log('새 세션 재생성', data.id);
+    return data.id as string;
+  }, []);
 
   const resetSession = useCallback(() => {
     setMessages([]);
@@ -312,5 +299,6 @@ export function useChat() {
     addSystemMessage,
     updateSession,
     resetSession,
+    createNewDbSession,
   };
 }
